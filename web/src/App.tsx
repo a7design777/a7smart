@@ -1,9 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useStore } from './store';
+import { useTheme, THEME_ICON, THEME_LABEL } from './theme';
 import { Login } from './components/Login';
 import { SwitchCard } from './components/SwitchCard';
 import { SensorCard } from './components/SensorCard';
 import { ClimateCard } from './components/ClimateCard';
+import { ManageApartments } from './components/ManageApartments';
 import type { Device } from './api';
 
 /**
@@ -17,8 +19,18 @@ const CameraCard = lazy(() =>
 const HistoryChart = lazy(() =>
   import('./components/HistoryChart').then((m) => ({ default: m.HistoryChart })),
 );
+const EnergyView = lazy(() =>
+  import('./components/EnergyView').then((m) => ({ default: m.EnergyView })),
+);
 
-type View = 'home' | 'energy';
+type View = 'home' | 'energy' | 'history' | 'manage';
+
+const VIEW_LABEL: Record<View, string> = {
+  home: 'Пристрої',
+  energy: 'Енергія',
+  history: 'Історія',
+  manage: 'Квартири',
+};
 
 export function App() {
   const { authed, loading, error, apartments, devices, activeApartmentId } = useStore();
@@ -26,6 +38,7 @@ export function App() {
   const setApartment = useStore((s) => s.setApartment);
   const logout = useStore((s) => s.logout);
   const [view, setView] = useState<View>('home');
+  const { theme, cycle } = useTheme();
 
   useEffect(() => {
     void refresh();
@@ -33,9 +46,7 @@ export function App() {
 
   const visible = useMemo(
     () =>
-      devices.filter(
-        (d) => activeApartmentId === null || d.apartmentId === activeApartmentId,
-      ),
+      devices.filter((d) => activeApartmentId === null || d.apartmentId === activeApartmentId),
     [devices, activeApartmentId],
   );
 
@@ -50,47 +61,75 @@ export function App() {
     };
   }, [visible]);
 
-  /** Пристрої, які пишуть історію — для вкладки «Історія». */
   const charted = useMemo(
     () =>
       visible.flatMap((d) =>
         (d.state?.metrics ?? [])
-          .filter((m) => ['temperature', 'humidity', 'power', 'energy'].includes(m.key))
+          .filter((m) => ['temperature', 'humidity', 'power'].includes(m.key))
           .map((m) => ({ device: d, metric: m })),
       ),
     [visible],
   );
 
-  if (loading) {
-    return <div className="empty">Завантаження…</div>;
-  }
+  if (loading) return <div className="empty">Завантаження…</div>;
+  if (!authed) return <Login />;
 
-  if (!authed) {
-    return <Login />;
-  }
+  const showTabs = apartments.length > 0 && view !== 'manage';
 
   return (
     <div className="app">
       <header className="topbar">
         <h1>a7smart</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="topbar__actions">
           <button
             type="button"
-            className="ghost-btn"
-            onClick={() => setView(view === 'home' ? 'energy' : 'home')}
+            className="ghost-btn icon-btn"
+            onClick={cycle}
+            title={THEME_LABEL[theme]}
+            aria-label={THEME_LABEL[theme]}
           >
-            {view === 'home' ? 'Історія' : 'Пристрої'}
+            {THEME_ICON[theme]}
           </button>
-          <button type="button" className="ghost-btn" onClick={() => void logout()}>
-            Вийти
+          <button
+            type="button"
+            className="ghost-btn icon-btn"
+            onClick={() => void logout()}
+            title="Вийти"
+            aria-label="Вийти"
+          >
+            ⏻
           </button>
         </div>
       </header>
 
+      <nav className="tabs" role="tablist" aria-label="Розділи">
+        {(Object.keys(VIEW_LABEL) as View[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            className="tab"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+          >
+            {VIEW_LABEL[v]}
+          </button>
+        ))}
+      </nav>
+
       {error && <div className="banner">{error}</div>}
 
-      {apartments.length > 1 && (
-        <div className="tabs" role="tablist">
+      {showTabs && (
+        <div className="tabs" role="tablist" aria-label="Квартири">
+          <button
+            type="button"
+            role="tab"
+            className="tab"
+            aria-selected={activeApartmentId === null}
+            onClick={() => setApartment(null)}
+          >
+            Усі
+          </button>
           {apartments.map((a) => (
             <button
               key={a.id}
@@ -103,93 +142,95 @@ export function App() {
               {a.name}
             </button>
           ))}
-          <button
-            type="button"
-            role="tab"
-            className="tab"
-            aria-selected={activeApartmentId === null}
-            onClick={() => setApartment(null)}
-          >
-            Усі
-          </button>
         </div>
       )}
 
-      {view === 'energy' ? (
-        <>
-          <h2 className="section-title">Історія</h2>
+      {view === 'manage' && <ManageApartments />}
+
+      {view === 'energy' && (
+        <Suspense fallback={<div className="empty">Завантаження…</div>}>
+          <EnergyView apartments={apartments} />
+        </Suspense>
+      )}
+
+      {view === 'history' && (
+        <Suspense fallback={<div className="empty">Завантаження графіків…</div>}>
           {charted.length === 0 ? (
             <div className="empty">Немає показників для графіків</div>
           ) : (
-            <Suspense fallback={<div className="empty">Завантаження графіків…</div>}>
-              <div className="grid grid--wide">
-                {charted.map(({ device, metric }) => (
-                  <HistoryChart
-                    key={`${device.id}-${metric.key}`}
-                    deviceId={device.id}
-                    deviceName={`${device.name} — ${metric.key}`}
-                    metricKey={metric.key}
-                    unit={metric.unit}
-                  />
-                ))}
-              </div>
-            </Suspense>
+            <div className="grid grid--wide">
+              {charted.map(({ device, metric }) => (
+                <HistoryChart
+                  key={`${device.id}-${metric.key}`}
+                  deviceId={device.id}
+                  deviceName={`${device.name} — ${metric.key}`}
+                  metricKey={metric.key}
+                  unit={metric.unit}
+                />
+              ))}
+            </div>
           )}
-        </>
-      ) : devices.length === 0 ? (
-        <div className="empty">
-          Пристроїв немає. Виконайте синхронізацію з Tuya, а якщо список порожній і після
-          неї — перевірте прив'язку акаунта Smart Life.
-        </div>
-      ) : (
-        <>
-          {groups.climate.length > 0 && (
-            <>
-              <h2 className="section-title">Клімат</h2>
-              <div className="grid grid--wide">
-                {groups.climate.map((d) => (
-                  <ClimateCard key={d.id} device={d} />
-                ))}
-              </div>
-            </>
-          )}
+        </Suspense>
+      )}
 
-          {groups.switches.length > 0 && (
-            <>
-              <h2 className="section-title">Світло та розетки</h2>
-              <div className="grid">
-                {groups.switches.map((d) => (
-                  <SwitchCard key={d.id} device={d} />
-                ))}
-              </div>
-            </>
-          )}
-
-          {groups.sensors.length > 0 && (
-            <>
-              <h2 className="section-title">Датчики</h2>
-              <div className="grid">
-                {groups.sensors.map((d) => (
-                  <SensorCard key={d.id} device={d} />
-                ))}
-              </div>
-            </>
-          )}
-
-          {groups.cameras.length > 0 && (
-            <>
-              <h2 className="section-title">Камери</h2>
-              <Suspense fallback={<div className="empty">Завантаження камер…</div>}>
+      {view === 'home' &&
+        (devices.length === 0 ? (
+          <div className="empty">
+            Пристроїв немає. Перевірте прив'язку акаунта Smart Life у Tuya IoT Platform.
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="empty">
+            У цій квартирі ще немає пристроїв. Додайте їх у розділі «Квартири».
+          </div>
+        ) : (
+          <>
+            {groups.climate.length > 0 && (
+              <>
+                <h2 className="section-title">Клімат</h2>
                 <div className="grid grid--wide">
-                  {groups.cameras.map((d) => (
-                    <CameraCard key={d.id} device={d} />
+                  {groups.climate.map((d) => (
+                    <ClimateCard key={d.id} device={d} />
                   ))}
                 </div>
-              </Suspense>
-            </>
-          )}
-        </>
-      )}
+              </>
+            )}
+
+            {groups.switches.length > 0 && (
+              <>
+                <h2 className="section-title">Світло та розетки</h2>
+                <div className="grid">
+                  {groups.switches.map((d) => (
+                    <SwitchCard key={d.id} device={d} />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {groups.sensors.length > 0 && (
+              <>
+                <h2 className="section-title">Датчики</h2>
+                <div className="grid">
+                  {groups.sensors.map((d) => (
+                    <SensorCard key={d.id} device={d} />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {groups.cameras.length > 0 && (
+              <>
+                <h2 className="section-title">Камери</h2>
+                <Suspense fallback={<div className="empty">Завантаження камер…</div>}>
+                  <div className="grid grid--wide">
+                    {groups.cameras.map((d) => (
+                      <CameraCard key={d.id} device={d} />
+                    ))}
+                  </div>
+                </Suspense>
+              </>
+            )}
+          </>
+        ))}
     </div>
   );
 }

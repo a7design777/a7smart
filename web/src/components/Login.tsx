@@ -34,7 +34,7 @@ export function Login() {
           autoFocus
           required
         />
-        <button type="submit" disabled={busy || password.length === 0}>
+        <button type="submit" className="primary-btn" disabled={busy || password.length === 0}>
           {busy ? 'Вхід…' : 'Увійти'}
         </button>
         {error && <span style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</span>}

@@ -26,6 +26,53 @@ export function listApartments(): Promise<ApartmentRow[]> {
   `;
 }
 
+export async function createApartment(name: string): Promise<ApartmentRow> {
+  // slug виводимо з назви, але за унікальність відповідає лічильник:
+  // назви кирилицею дали б порожній slug, а дублікати — конфлікт.
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'apt';
+
+  const rows = await sql<ApartmentRow[]>`
+    INSERT INTO apartments (slug, name, sort_order)
+    VALUES (
+      ${base} || '-' || (SELECT coalesce(max(id), 0) + 1 FROM apartments)::text,
+      ${name},
+      (SELECT coalesce(max(sort_order), 0) + 1 FROM apartments)
+    )
+    RETURNING id, slug, name, sort_order
+  `;
+  return rows[0]!;
+}
+
+export async function renameApartment(id: number, name: string): Promise<void> {
+  await sql`UPDATE apartments SET name = ${name} WHERE id = ${id}`;
+}
+
+/**
+ * Пристрої не видаляються разом із квартирою — вони просто лишаються
+ * без прив'язки (ON DELETE SET NULL) і повертаються в «Без квартири».
+ */
+export async function deleteApartment(id: number): Promise<void> {
+  await sql`DELETE FROM apartments WHERE id = ${id}`;
+}
+
+/** Прив'язати пристрій до квартири. null — прибрати прив'язку. */
+export async function assignDevice(
+  tuyaId: string,
+  apartmentId: number | null,
+): Promise<void> {
+  await sql`
+    UPDATE devices SET apartment_id = ${apartmentId} WHERE tuya_id = ${tuyaId}
+  `;
+}
+
+export async function renameDevice(tuyaId: string, name: string): Promise<void> {
+  await sql`UPDATE devices SET name = ${name} WHERE tuya_id = ${tuyaId}`;
+}
+
 export function listEnabledDevices(): Promise<DeviceRow[]> {
   return sql<DeviceRow[]>`
     SELECT tuya_id, apartment_id, name, category, kind, enabled, sort_order
@@ -105,6 +152,57 @@ export function getHistory(opts: {
       AND ts >= ${opts.from}
       AND ts <= ${opts.to}
     GROUP BY bucket
+    ORDER BY bucket
+  `;
+}
+
+export interface EnergyBucket {
+  apartment_id: number | null;
+  bucket: Date;
+  kwh: number;
+}
+
+/**
+ * Споживання по квартирах.
+ *
+ * Рахується інтегруванням потужності, а не різницею лічильника `add_ele`:
+ * Tuya-лічильники періодично скидаються, і різниця тоді дає від'ємні
+ * значення або викиди. Потужність від цього не залежить.
+ *
+ * Проміжок між сусідніми замірами обмежений 15 хвилинами (3 інтервали
+ * опитування). Без цього простій сервера на добу зарахувався б як доба
+ * роботи приладу на останній відомій потужності.
+ */
+export function getEnergyByApartment(opts: {
+  from: Date;
+  to: Date;
+  bucketHours: number;
+}): Promise<EnergyBucket[]> {
+  const bucket = `${opts.bucketHours} hours`;
+  return sql<EnergyBucket[]>`
+    WITH steps AS (
+      SELECT
+        d.apartment_id,
+        r.ts,
+        r.value AS watts,
+        LEAST(
+          EXTRACT(EPOCH FROM (r.ts - LAG(r.ts) OVER (PARTITION BY r.device_id ORDER BY r.ts))),
+          900
+        ) AS seconds
+      FROM readings r
+      JOIN devices d ON d.tuya_id = r.device_id
+      WHERE r.key = 'power'
+        AND r.ts >= ${opts.from}
+        AND r.ts <= ${opts.to}
+    )
+    SELECT
+      apartment_id,
+      to_timestamp(floor(extract(epoch FROM ts) / extract(epoch FROM ${bucket}::interval))
+        * extract(epoch FROM ${bucket}::interval)) AS bucket,
+      COALESCE(sum(watts * seconds) / 3600.0 / 1000.0, 0) AS kwh
+    FROM steps
+    WHERE seconds IS NOT NULL
+    GROUP BY apartment_id, bucket
     ORDER BY bucket
   `;
 }

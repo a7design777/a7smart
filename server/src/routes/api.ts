@@ -5,7 +5,17 @@ import { config } from '../config.js';
 import { sendCommands, allocateCameraStream } from '../tuya/devices.js';
 import { TuyaApiError } from '../tuya/client.js';
 import { getAllCachedStates, getCachedState, syncDevices, health } from '../poller.js';
-import { listApartments, listEnabledDevices, getHistory } from '../db/queries.js';
+import {
+  listApartments,
+  listEnabledDevices,
+  getHistory,
+  createApartment,
+  renameApartment,
+  deleteApartment,
+  assignDevice,
+  renameDevice,
+  getEnergyByApartment,
+} from '../db/queries.js';
 
 export const api = new Hono();
 
@@ -58,13 +68,38 @@ api.get('/health', (c) =>
 // ── Захищені ────────────────────────────────────────────────────────────────
 
 api.use('/apartments', requireAuth);
+api.use('/apartments/*', requireAuth);
 api.use('/devices', requireAuth);
 api.use('/devices/*', requireAuth);
 api.use('/cameras/*', requireAuth);
 api.use('/history', requireAuth);
+api.use('/energy', requireAuth);
 api.use('/sync', requireAuth);
 
 api.get('/apartments', async (c) => c.json(await listApartments()));
+
+const nameSchema = z.object({ name: z.string().trim().min(1).max(60) });
+
+api.post('/apartments', async (c) => {
+  const parsed = nameSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+  return c.json(await createApartment(parsed.data.name), 201);
+});
+
+api.patch('/apartments/:id', async (c) => {
+  const parsed = nameSchema.safeParse(await c.req.json().catch(() => null));
+  const id = Number(c.req.param('id'));
+  if (!parsed.success || !Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+  await renameApartment(id, parsed.data.name);
+  return c.json({ ok: true });
+});
+
+api.delete('/apartments/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+  await deleteApartment(id);
+  return c.json({ ok: true });
+});
 
 api.get('/devices', async (c) => {
   const rows = await listEnabledDevices();
@@ -140,6 +175,42 @@ api.get('/history', async (c) => {
   const bucketMinutes = Math.max(5, Math.round((hours * 60) / 150 / 5) * 5);
 
   return c.json(await getHistory({ deviceId: device, key, from, to, bucketMinutes }));
+});
+
+const assignSchema = z.object({ apartmentId: z.number().int().nullable() });
+
+api.patch('/devices/:id/apartment', async (c) => {
+  const parsed = assignSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+  await assignDevice(c.req.param('id'), parsed.data.apartmentId);
+  return c.json({ ok: true });
+});
+
+api.patch('/devices/:id/name', async (c) => {
+  const parsed = nameSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+  await renameDevice(c.req.param('id'), parsed.data.name);
+  return c.json({ ok: true });
+});
+
+const energySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(7),
+});
+
+/**
+ * Споживання по квартирах. Гранулярність підбирається під період:
+ * за тиждень — по годинах, за місяць — по днях.
+ */
+api.get('/energy', async (c) => {
+  const parsed = energySchema.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+
+  const { days } = parsed.data;
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 24 * 3600_000);
+  const bucketHours = days <= 2 ? 1 : days <= 14 ? 6 : 24;
+
+  return c.json(await getEnergyByApartment({ from, to, bucketHours }));
 });
 
 api.post('/sync', async (c) => c.json({ count: await syncDevices() }));

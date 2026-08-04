@@ -1,4 +1,33 @@
-:root {
+/*
+ * Дві теми. Світла побудована на палітрі референсу Zyniq:
+ * лавандовий фон #E8E8F7, насичений синій #213CCC, глибокий #04179D,
+ * приглушений текст #444D67, оливковий #728557 як «все добре».
+ *
+ * Тема застосовується через [data-theme] на <html>. Без атрибута
+ * діє системна вподоба.
+ */
+
+:root,
+:root[data-theme='light'] {
+  --bg: #e8e8f7;
+  --surface: #ffffff;
+  --surface-hi: #f2f3fb;
+  --border: #d8daef;
+  --text: #03080c;
+  --muted: #444d67;
+  --accent: #213ccc;
+  --accent-deep: #04179d;
+  --accent-soft: #b3c2ed;
+  --on-accent: #ffffff;
+  --ok: #728557;
+  --warm: #a86a2c;
+  --danger: #c62b3f;
+  --shadow: 0 1px 2px rgba(4, 23, 157, 0.06), 0 8px 24px rgba(4, 23, 157, 0.07);
+  --shadow-sm: 0 1px 2px rgba(4, 23, 157, 0.08);
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
   --bg: #0f1115;
   --surface: #181b22;
   --surface-hi: #212632;
@@ -6,11 +35,40 @@
   --text: #e8ecf4;
   --muted: #8b94a8;
   --accent: #4f8cff;
+  --accent-deep: #6f9fff;
+  --accent-soft: #2b3550;
+  --on-accent: #ffffff;
+  --ok: #3ddc97;
   --warm: #ff9f45;
   --danger: #ff5c5c;
-  --ok: #3ddc97;
-  --radius: 14px;
+  --shadow: none;
+  --shadow-sm: none;
   color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0f1115;
+    --surface: #181b22;
+    --surface-hi: #212632;
+    --border: #2a3040;
+    --text: #e8ecf4;
+    --muted: #8b94a8;
+    --accent: #4f8cff;
+    --accent-deep: #6f9fff;
+    --accent-soft: #2b3550;
+    --ok: #3ddc97;
+    --warm: #ff9f45;
+    --danger: #ff5c5c;
+    --shadow: none;
+    --shadow-sm: none;
+    color-scheme: dark;
+  }
+}
+
+:root {
+  --radius: 18px;
+  --radius-sm: 12px;
 }
 
 * {
@@ -30,6 +88,7 @@ body {
   font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   padding-bottom: env(safe-area-inset-bottom);
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 button {
@@ -41,47 +100,73 @@ button {
 /* ── Layout ─────────────────────────────────────────────── */
 
 .app {
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 16px 14px 40px;
+  padding: 16px 14px 48px;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .topbar h1 {
-  font-size: 19px;
+  font-size: 20px;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+
+.topbar__actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .ghost-btn {
-  background: none;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 9px;
-  padding: 6px 12px;
+  border-radius: 10px;
+  padding: 7px 13px;
   color: var(--muted);
   font-size: 13px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
 .ghost-btn:hover {
   color: var(--text);
-  border-color: var(--muted);
+  border-color: var(--accent-soft);
 }
 
-/* Вкладки квартир — горизонтальний скрол на вузьких екранах */
+.ghost-btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Іконкова кнопка — на вузьких екранах текст не влазить */
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 16px;
+  flex: 0 0 auto;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 4px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tabs::-webkit-scrollbar {
@@ -93,29 +178,31 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 7px 15px;
+  padding: 8px 16px;
   font-size: 14px;
   white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
 .tab[aria-selected='true'] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .section-title {
-  font-size: 13px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: var(--muted);
-  margin: 22px 0 10px;
+  margin: 24px 0 10px;
+  font-weight: 600;
 }
 
 .grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
 }
 
 .grid--wide {
@@ -128,42 +215,27 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 15px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .card--offline {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
-/* Протікання, витік газу, сіла батарея — має впадати в око. */
 .card--alarm {
   border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
   opacity: 1;
-}
-
-.alarm-flag {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--danger);
-  letter-spacing: 0.01em;
-}
-
-.state-chip {
-  font-size: 13px;
-  color: var(--muted);
-  background: var(--surface-hi);
-  border-radius: 999px;
-  padding: 3px 10px;
 }
 
 .card__name {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 550;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -174,10 +246,25 @@ button {
   color: var(--muted);
 }
 
+.alarm-flag {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--danger);
+}
+
+.state-chip {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface-hi);
+  border-radius: 999px;
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+
 .metric-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: 6px 16px;
 }
 
 .metric {
@@ -189,7 +276,8 @@ button {
 .metric__value {
   font-size: 22px;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  font-weight: 600;
 }
 
 .metric__unit {
@@ -206,12 +294,25 @@ button {
   border-radius: 999px;
   border: none;
   background: var(--surface-hi);
+  box-shadow: inset 0 0 0 1px var(--border);
   transition: background 0.18s ease;
   flex: 0 0 auto;
 }
 
 .toggle[aria-pressed='true'] {
-  background: var(--ok);
+  background: var(--accent);
+  box-shadow: none;
+}
+
+/*
+ * Розширена зона натискання. Візуально перемикач лишається 50×29,
+ * але пальцем ловиться в межах ~50×45 — інакше на телефоні в нього
+ * важко влучити (рекомендований мінімум для тач-цілі — 44px).
+ */
+.toggle::before {
+  content: '';
+  position: absolute;
+  inset: -8px -2px;
 }
 
 .toggle::after {
@@ -223,6 +324,7 @@ button {
   height: 23px;
   border-radius: 50%;
   background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   transition: transform 0.18s ease;
 }
 
@@ -251,13 +353,14 @@ button {
 }
 
 .stepper button {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--surface-hi);
   font-size: 19px;
   line-height: 1;
+  flex: 0 0 auto;
 }
 
 .stepper button:disabled {
@@ -268,30 +371,32 @@ button {
 .stepper__value {
   font-size: 26px;
   font-variant-numeric: tabular-nums;
-  min-width: 74px;
+  min-width: 70px;
   text-align: center;
   color: var(--warm);
+  font-weight: 600;
 }
 
 /* ── Camera ─────────────────────────────────────────────── */
 
-.camera video {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #000;
-  border-radius: 10px;
-  object-fit: cover;
-}
-
+.camera video,
 .camera__placeholder {
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #000;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
+}
+
+.camera video {
+  object-fit: cover;
+  display: block;
+}
+
+.camera__placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
+  color: #8b94a8;
   font-size: 13px;
   text-align: center;
   padding: 12px;
@@ -308,46 +413,192 @@ button {
 
 .login form {
   width: 100%;
-  max-width: 320px;
+  max-width: 330px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: var(--surface);
+  padding: 26px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
 }
 
-.login input {
-  background: var(--surface);
+input[type='password'],
+input[type='text'] {
+  background: var(--surface-hi);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 12px 14px;
   color: var(--text);
   font: inherit;
+  width: 100%;
 }
 
-.login input:focus {
+input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
 
-.login button[type='submit'] {
+.primary-btn {
   background: var(--accent);
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 12px;
-  color: #fff;
-  font-weight: 500;
+  color: var(--on-accent);
+  font-weight: 550;
 }
 
-.login button[type='submit']:disabled {
+.primary-btn:disabled {
   opacity: 0.5;
+}
+
+/* ── Керування квартирами ───────────────────────────────── */
+
+.manage-head {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.manage-head input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dropzone {
+  background: var(--surface);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 13px;
+  margin-bottom: 12px;
+  transition: all 0.15s ease;
+}
+
+.dropzone--over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.dropzone__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dropzone__title {
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 34px;
+}
+
+/* Перетягуваний елемент. touch-action: none обов'язковий — без нього
+   браузер перехоплює жест як скрол і drag не починається на телефоні. */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-hi);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  max-width: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+
+.chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip--dragging {
+  opacity: 0.35;
+}
+
+/* Копія, що летить за пальцем */
+.chip--ghost {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  cursor: grabbing;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.chip__kind {
+  font-size: 11px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.chip--ghost .chip__kind {
+  color: var(--on-accent);
+  opacity: 0.8;
+}
+
+/* ── Енергія ────────────────────────────────────────────── */
+
+.energy-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.energy-total__value {
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.legend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: 0 0 auto;
 }
 
 /* ── Misc ───────────────────────────────────────────────── */
 
 .banner {
-  background: color-mix(in srgb, var(--danger) 15%, var(--surface));
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
   border: 1px solid var(--danger);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  padding: 10px 13px;
   font-size: 13px;
   margin-bottom: 14px;
 }
@@ -355,11 +606,68 @@ button {
 .empty {
   color: var(--muted);
   font-size: 14px;
-  padding: 28px 0;
+  padding: 30px 12px;
   text-align: center;
 }
 
 .chart-wrap {
-  height: 190px;
+  height: 200px;
   margin-top: 4px;
+}
+
+/* ── Адаптація під телефон ──────────────────────────────── */
+
+@media (max-width: 420px) {
+  .app {
+    padding: 12px 11px 40px;
+  }
+
+  .grid {
+    /* Дві колонки навіть на 320px — одна виглядає надто порожньо */
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .grid--wide {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    padding: 13px;
+  }
+
+  .metric__value {
+    font-size: 20px;
+  }
+
+  .topbar h1 {
+    font-size: 18px;
+  }
+
+  /* Стрілки температури та іконкові кнопки — до комфортних 44px */
+  .stepper button,
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Чипи в режимі перетягування теж мають бути зручними для пальця */
+  .chip {
+    padding: 9px 13px;
+    font-size: 14px;
+  }
+}
+
+/* Довгі списки вкладок не мають штовхати layout */
+@media (max-width: 600px) {
+  .manage-head {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::after {
+    transition: none !important;
+  }
 }

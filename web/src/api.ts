@@ -103,4 +103,36 @@ export const api = {
     ),
 
   sync: () => request<{ count: number }>('/sync', { method: 'POST' }),
+
+  createApartment: (name: string) =>
+    request<Apartment>('/apartments', { method: 'POST', body: JSON.stringify({ name }) }),
+
+  renameApartment: (id: number, name: string) =>
+    request<{ ok: true }>(`/apartments/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteApartment: (id: number) =>
+    request<{ ok: true }>(`/apartments/${id}`, { method: 'DELETE' }),
+
+  assignDevice: (deviceId: string, apartmentId: number | null) =>
+    request<{ ok: true }>(`/devices/${deviceId}/apartment`, {
+      method: 'PATCH',
+      body: JSON.stringify({ apartmentId }),
+    }),
+
+  renameDevice: (deviceId: string, name: string) =>
+    request<{ ok: true }>(`/devices/${deviceId}/name`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  energy: (days: number) => request<EnergyBucket[]>(`/energy?days=${days}`),
 };
+
+export interface EnergyBucket {
+  apartment_id: number | null;
+  bucket: string;
+  kwh: number;
+}

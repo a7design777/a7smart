@@ -20,6 +20,9 @@ interface AppState {
   refresh: () => Promise<void>;
   setApartment: (id: number | null) => void;
   sendCommand: (deviceId: string, code: string, value: unknown) => Promise<void>;
+  addApartment: (name: string) => Promise<void>;
+  removeApartment: (id: number) => Promise<void>;
+  assign: (deviceId: string, apartmentId: number | null) => Promise<void>;
 }
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -54,7 +57,12 @@ export const useStore = create<AppState>((set, get) => ({
         authed: true,
         loading: false,
         error: null,
-        activeApartmentId: s.activeApartmentId ?? apartments[0]?.id ?? null,
+        // Якщо обрана квартира зникла (видалили тут або в іншій вкладці),
+        // повертаємось до «Усі». Інакше дашборд лишився б порожнім, а
+        // вкладки, щоб перемкнутися назад, уже не існує.
+        activeApartmentId: apartments.some((a) => a.id === s.activeApartmentId)
+          ? s.activeApartmentId
+          : null,
       }));
 
       if (!refreshTimer) {
@@ -107,5 +115,36 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Даємо Tuya час застосувати команду, потім звіряємось.
     setTimeout(() => void get().refresh(), 2000);
+  },
+
+  async addApartment(name) {
+    const apartment = await api.createApartment(name);
+    set((s) => ({ apartments: [...s.apartments, apartment] }));
+  },
+
+  async removeApartment(id) {
+    await api.deleteApartment(id);
+    set((s) => ({
+      apartments: s.apartments.filter((a) => a.id !== id),
+      // Пристрої не зникають разом із квартирою — вони повертаються
+      // в «Без квартири» (на боці БД це ON DELETE SET NULL).
+      devices: s.devices.map((d) =>
+        d.apartmentId === id ? { ...d, apartmentId: null } : d,
+      ),
+      activeApartmentId: s.activeApartmentId === id ? null : s.activeApartmentId,
+    }));
+  },
+
+  async assign(deviceId, apartmentId) {
+    // Оптимістично: перетягування має відгукуватися миттєво.
+    set((s) => ({
+      devices: s.devices.map((d) => (d.id === deviceId ? { ...d, apartmentId } : d)),
+    }));
+    try {
+      await api.assignDevice(deviceId, apartmentId);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      await get().refresh();
+    }
   },
 }));
