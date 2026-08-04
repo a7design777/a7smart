@@ -1,14 +1,18 @@
 import { sql } from './client.js';
 import type { DeviceKind } from '../tuya/normalize.js';
 
+export type Provider = 'tuya' | 'remihome';
+
 export interface DeviceRow {
-  tuya_id: string;
+  external_id: string;
+  provider: Provider;
   apartment_id: number | null;
   name: string;
   category: string;
   kind: string;
   enabled: boolean;
   sort_order: number;
+  source_zone: string | null;
 }
 
 export interface ApartmentRow {
@@ -65,17 +69,18 @@ export async function assignDevice(
   apartmentId: number | null,
 ): Promise<void> {
   await sql`
-    UPDATE devices SET apartment_id = ${apartmentId} WHERE tuya_id = ${tuyaId}
+    UPDATE devices SET apartment_id = ${apartmentId} WHERE external_id = ${tuyaId}
   `;
 }
 
 export async function renameDevice(tuyaId: string, name: string): Promise<void> {
-  await sql`UPDATE devices SET name = ${name} WHERE tuya_id = ${tuyaId}`;
+  await sql`UPDATE devices SET name = ${name} WHERE external_id = ${tuyaId}`;
 }
 
 export function listEnabledDevices(): Promise<DeviceRow[]> {
   return sql<DeviceRow[]>`
-    SELECT tuya_id, apartment_id, name, category, kind, enabled, sort_order
+    SELECT external_id, provider, apartment_id, name, category, kind,
+           enabled, sort_order, source_zone
     FROM devices
     WHERE enabled
     ORDER BY sort_order, name
@@ -89,18 +94,28 @@ export function listEnabledDevices(): Promise<DeviceRow[]> {
  * синхронізації вони НЕ перезаписуються — оновлюються лише технічні поля.
  */
 export async function upsertDevices(
-  devices: Array<{ id: string; name: string; category: string; kind: DeviceKind }>,
+  devices: Array<{
+    id: string;
+    name: string;
+    category: string;
+    kind: DeviceKind;
+    provider: Provider;
+    sourceZone?: string | null;
+  }>,
 ): Promise<void> {
   if (devices.length === 0) return;
 
   for (const d of devices) {
     await sql`
-      INSERT INTO devices (tuya_id, name, category, kind, synced_at)
-      VALUES (${d.id}, ${d.name}, ${d.category}, ${d.kind}, now())
-      ON CONFLICT (tuya_id) DO UPDATE
-        SET category  = EXCLUDED.category,
-            kind      = EXCLUDED.kind,
-            synced_at = now()
+      INSERT INTO devices (external_id, provider, name, category, kind, source_zone, synced_at)
+      VALUES (${d.id}, ${d.provider}, ${d.name}, ${d.category}, ${d.kind},
+              ${d.sourceZone ?? null}, now())
+      ON CONFLICT (external_id) DO UPDATE
+        SET provider    = EXCLUDED.provider,
+            category    = EXCLUDED.category,
+            kind        = EXCLUDED.kind,
+            source_zone = EXCLUDED.source_zone,
+            synced_at   = now()
     `;
   }
 }
@@ -190,7 +205,7 @@ export function getEnergyByApartment(opts: {
           900
         ) AS seconds
       FROM readings r
-      JOIN devices d ON d.tuya_id = r.device_id
+      JOIN devices d ON d.external_id = r.device_id
       WHERE r.key = 'power'
         AND r.ts >= ${opts.from}
         AND r.ts <= ${opts.to}

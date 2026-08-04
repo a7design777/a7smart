@@ -16,6 +16,14 @@ console.log(`Квартир:   ${apartments.count}`);
 console.log(`Пристроїв: ${devices.count}`);
 console.log(`Записів історії: ${readings.count}`);
 
+const byProvider = await sql<{ provider: string; count: number }[]>`
+  SELECT provider, count(*)::int FROM devices GROUP BY provider ORDER BY count DESC
+`;
+console.log('\nЗа джерелом:');
+for (const row of byProvider) {
+  console.log(`  ${row.provider.padEnd(10)} ${row.count}`);
+}
+
 const byKind = await sql<{ kind: string; count: number }[]>`
   SELECT kind, count(*)::int FROM devices GROUP BY kind ORDER BY count DESC
 `;

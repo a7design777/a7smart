@@ -97,23 +97,45 @@ async function getSession(): Promise<string> {
  * cookie порталу живуть недовго.
  */
 export async function remihomeGet<T>(path: string, retry = true): Promise<T> {
+  return remihomeRequest<T>(path, 'GET', retry);
+}
+
+export async function remihomeRequest<T>(
+  path: string,
+  method: 'GET' | 'POST' = 'GET',
+  retry = true,
+): Promise<T> {
   const cookie = await getSession();
   const url = `${BASE}/${config.REMIHOME_INSTALLATION}/RemicaHome${path}`;
 
   const res = await fetch(url, {
-    headers: { Cookie: cookie, Accept: 'application/json' },
+    method,
+    headers: {
+      Cookie: cookie,
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      // Портал відповідає JSON лише на запити, які виглядають як AJAX
+      // від його власного інтерфейсу.
+      'X-Requested-With': 'XMLHttpRequest',
+      Referer: `${BASE}/${config.REMIHOME_INSTALLATION}/RemicaHome`,
+    },
     redirect: 'manual',
   });
 
   // Редирект тут означає «сесія протухла»: API віддає JSON, а не сторінки.
   if (res.status === 401 || res.status === 403 || (res.status >= 300 && res.status < 400)) {
     sessionCookie = null;
-    if (retry) return remihomeGet<T>(path, false);
+    if (retry) return remihomeRequest<T>(path, method, false);
     throw new RemihomeError(`Сесію відхилено: ${url}`, res.status);
   }
 
   if (!res.ok) {
-    throw new RemihomeError(`Помилка запиту ${url}`, res.status);
+    // Код статусу та початок тіла — єдине, що дозволяє відрізнити
+    // «немає такого шляху» від «потрібен інший метод» чи «немає прав».
+    const body = await res.text().catch(() => '');
+    throw new RemihomeError(
+      `HTTP ${res.status} ${res.statusText} → ${url}${body ? `\n    тіло: ${body.slice(0, 160)}` : ''}`,
+      res.status,
+    );
   }
 
   const text = await res.text();

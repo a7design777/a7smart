@@ -11,7 +11,12 @@
  * .gitignore), щоб не засмічувати термінал 15 кілобайтами.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
-import { remihomeGet, isRemihomeConfigured, RemihomeError } from '../remihome/client.js';
+import {
+  remihomeGet,
+  remihomeRequest,
+  isRemihomeConfigured,
+  RemihomeError,
+} from '../remihome/client.js';
 
 const OUT_DIR = '.artifacts';
 
@@ -44,18 +49,26 @@ function describe(value: unknown, depth = 0): string {
 async function dump(label: string, path: string) {
   console.log('─'.repeat(70));
   console.log(`${label}   (${path})`);
+
+  // Спершу GET; якщо шлях його не приймає — пробуємо POST. Який саме
+  // метод очікує портал, з боку клієнта наперед не видно.
+  let data: unknown;
   try {
-    const data = await remihomeGet<unknown>(path);
-    await writeFile(
-      `${OUT_DIR}/remihome-${label}.json`,
-      JSON.stringify(data, null, 2),
-      'utf8',
-    );
-    console.log(describe(data));
-    console.log(`\n  → повний JSON: ${OUT_DIR}/remihome-${label}.json`);
-  } catch (err) {
-    console.log(`  ПОМИЛКА: ${err instanceof Error ? err.message : err}`);
+    data = await remihomeGet<unknown>(path);
+  } catch (getErr) {
+    console.log(`  GET  → ${getErr instanceof Error ? getErr.message : getErr}`);
+    try {
+      data = await remihomeRequest<unknown>(path, 'POST');
+      console.log('  POST → успішно');
+    } catch (postErr) {
+      console.log(`  POST → ${postErr instanceof Error ? postErr.message : postErr}`);
+      return;
+    }
   }
+
+  await writeFile(`${OUT_DIR}/remihome-${label}.json`, JSON.stringify(data, null, 2), 'utf8');
+  console.log(describe(data));
+  console.log(`\n  → повний JSON: ${OUT_DIR}/remihome-${label}.json`);
 }
 
 async function main() {
@@ -74,6 +87,21 @@ async function main() {
   await dump('zones', '/zones');
   await dump('home', '/home');
   await dump('hvac', '/homeHvacState');
+
+  // Статус окремого пристрою — саме цей шлях видно в мережевій панелі
+  // порталу. Якщо спільний /status не віддається, читатимемо поштучно.
+  try {
+    const devices = await remihomeGet<Array<{ code: string; name: string }>>(
+      '/devices?includeHidden=false',
+    );
+    const first = devices[0];
+    if (first) {
+      console.log(`\n(перевіряємо на пристрої «${first.name.trim()}»)`);
+      await dump('device-status', `/devices/${first.code}/status`);
+    }
+  } catch {
+    /* каталог уже не дістали вище — повторювати помилку немає сенсу */
+  }
 
   console.log('─'.repeat(70));
   console.log('\nГотово. Надішліть вміст .artifacts/remihome-devices.json та');

@@ -4,7 +4,13 @@ import { requireAuth, verifyPassword, startSession, endSession } from '../auth.j
 import { config } from '../config.js';
 import { sendCommands, allocateCameraStream } from '../tuya/devices.js';
 import { TuyaApiError } from '../tuya/client.js';
-import { getAllCachedStates, getCachedState, syncDevices, health } from '../poller.js';
+import {
+  getAllCachedStates,
+  getCachedState,
+  syncDevices,
+  getProvider,
+  health,
+} from '../poller.js';
 import {
   listApartments,
   listEnabledDevices,
@@ -62,6 +68,9 @@ api.get('/health', (c) =>
     lastPollAt: health.lastPollAt,
     lastError: health.lastError,
     tuyaAuthProblem: health.authProblem,
+    // Remihome читається через недокументований інтерфейс, тому його стан
+    // корисно бачити окремо: він може відвалитися незалежно від Tuya.
+    remihome: health.remihome,
   }),
 );
 
@@ -107,11 +116,11 @@ api.get('/devices', async (c) => {
 
   return c.json(
     rows.map((row) => ({
-      id: row.tuya_id,
+      id: row.external_id,
       name: row.name,
       kind: row.kind,
       apartmentId: row.apartment_id,
-      state: states.get(row.tuya_id) ?? null,
+      state: states.get(row.external_id) ?? null,
     })),
   );
 });
@@ -129,6 +138,16 @@ const commandSchema = z.object({
 api.post('/devices/:id/command', async (c) => {
   const parsed = commandSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+
+  // Ендпоїнт запису в API Remihome поки не знайдений, тож його пристрої
+  // доступні лише для читання. Краще сказати це прямо, ніж відправити
+  // команду в Tuya й отримати незрозумілу помилку.
+  if (getProvider(c.req.param('id')) === 'remihome') {
+    return c.json(
+      { error: 'read_only', message: 'Пристрої Remihome поки лише для читання' },
+      501,
+    );
+  }
 
   try {
     await sendCommands(c.req.param('id'), [parsed.data]);
