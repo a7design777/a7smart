@@ -1,0 +1,35 @@
+# Запасний варіант: збірка образу на сервері замість тягнення з GHCR.
+#
+# Потрібен, коли доступ до GHCR не налагоджується (реєстр не приймає
+# fine-grained токени — тільки classic). Так само зроблено в a7cms,
+# тож на цьому сервері схема вже перевірена.
+#
+# Ціна: збірка на 1 vCPU триває кілька хвилин. Swap обов'язковий,
+# інакше є ризик OOM — див. крок 2 у DEPLOY.md.
+#
+#   docker compose -f docker-compose.build.yml up -d --build
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: a7smart:local
+    container_name: a7smart
+    restart: unless-stopped
+    env_file: .env.production
+    mem_limit: 256m
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=n8n-docker_default"
+      - "traefik.http.routers.a7smart.rule=Host(`smart.zvyazok.com`)"
+      - "traefik.http.routers.a7smart.entrypoints=web,websecure"
+      - "traefik.http.routers.a7smart.tls=true"
+      - "traefik.http.routers.a7smart.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.a7smart.loadbalancer.server.port=3000"
+
+networks:
+  traefik:
+    name: n8n-docker_default
+    external: true

@@ -119,11 +119,28 @@ printf 'Host github-a7smart\n  HostName github.com\n  User git\n  IdentityFile ~
 Образ секретів не містить: усі ключі підставляються з `.env.production`
 під час запуску.
 
-Якщо пакет має лишитися приватним — PAT зі скоупом `read:packages`:
+Якщо пакет має лишитися приватним — потрібен логін:
 
 ```bash
 docker login ghcr.io -u a7design777
 ```
+
+> **GHCR не приймає fine-grained токени.** Потрібен саме *classic* PAT зі
+> скоупом `read:packages` (Settings → Developer settings → Tokens **(classic)**).
+> Fine-grained токен дає `denied: denied`, що виглядає як помилка пароля,
+> хоча насправді це непідтримуваний тип токена.
+
+### 6.3. Якщо GHCR не піддається
+
+Можна взагалі обійтися без реєстру й збирати образ на сервері — так само,
+як зроблено в a7cms:
+
+```bash
+docker compose -f docker-compose.build.yml up -d --build
+```
+
+Збірка на 1 vCPU триває кілька хвилин; swap із кроку 2 обов'язковий.
+Оновлення тоді — `git pull` плюс та сама команда.
 
 ## Крок 7. Сервер
 
