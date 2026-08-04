@@ -9,3 +9,4 @@ web/dist/
 server/dist/
 .artifacts/
 .prodtest/
+.artifacts/

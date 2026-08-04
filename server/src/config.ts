@@ -17,6 +17,13 @@ const schema = z.object({
 
   DATABASE_URL: z.string().url(),
 
+  // Remihome (Remica) — необов'язковий провайдер. Якщо не заповнений,
+  // просто не вмикається; Tuya від цього не залежить.
+  REMIHOME_EMAIL: z.string().email().optional(),
+  REMIHOME_PASSWORD: z.string().min(1).optional(),
+  // Число у шляху порталу: proxy.remihome.es/<ЦЕ>/RemicaHome/...
+  REMIHOME_INSTALLATION: z.string().min(1).optional(),
+
   // Один спільний пароль на сім'ю — мультитенантності не передбачено.
   APP_PASSWORD_HASH: z.string().min(1, 'APP_PASSWORD_HASH порожній'),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET має бути ≥32 символів'),

@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrate": "tsx --env-file=../.env src/db/migrate.ts",
     "probe": "tsx --env-file=../.env src/scripts/probe.ts",
-    "status": "tsx --env-file=../.env src/scripts/status.ts"
+    "status": "tsx --env-file=../.env src/scripts/status.ts",
+    "probe:remihome": "tsx --env-file=../.env src/scripts/probe-remihome.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.0",
