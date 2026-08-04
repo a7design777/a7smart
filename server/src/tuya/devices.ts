@@ -37,13 +37,21 @@ interface BatchStatusEntry {
 }
 
 /**
- * Статуси кількох пристроїв одним викликом — головний спосіб економити
- * квоту Tuya API у поллері.
+ * Скільки пристроїв за один виклик. Tuya обмежує довжину device_ids;
+ * 20 — безпечне значення, яке лишає запас.
+ */
+const BATCH_SIZE = 20;
+
+/**
+ * Статуси кількох пристроїв пачками — головний спосіб економити квоту
+ * Tuya API. При 47 пристроях це 3 виклики замість 47.
  *
- * Батч-ендпоїнт документований неоднозначно, тому при його відмові
- * робимо відкат на послідовні запити. Це дорожче по квоті, але працює
- * гарантовано. Після першого запуску `npm run tuya:probe` варто звірити,
- * чи батч узагалі відповідає, і за потреби прибрати відкат.
+ * Використовується саме `/v1.0/iot-03/devices/status`: він віддає масив
+ * `{id, status}`. Схожий `/v1.0/devices/status` повертає об'єкт, ключований
+ * за id — інша структура, легко переплутати.
+ *
+ * Відкату на поштучні запити тут навмисно немає: він тихо перетворив би
+ * 3 виклики на 47 і спалив квоту непомітно. Помилка має бути видимою.
  */
 export async function getDevicesStatus(
   deviceIds: string[],
@@ -51,27 +59,18 @@ export async function getDevicesStatus(
   const result = new Map<string, TuyaStatusItem[]>();
   if (deviceIds.length === 0) return result;
 
-  try {
+  for (let i = 0; i < deviceIds.length; i += BATCH_SIZE) {
+    const chunk = deviceIds.slice(i, i + BATCH_SIZE);
     const batch = await tuyaRequest<BatchStatusEntry[]>({
-      path: '/v1.0/devices/status',
+      path: '/v1.0/iot-03/devices/status',
       method: 'GET',
-      query: { device_ids: deviceIds.join(',') },
+      query: { device_ids: chunk.join(',') },
     });
     for (const entry of batch) {
       result.set(entry.id, entry.status);
     }
-    return result;
-  } catch (err) {
-    console.warn('[tuya] батч-статус недоступний, відкат на поштучні запити:', err);
   }
 
-  for (const id of deviceIds) {
-    try {
-      result.set(id, await getDeviceStatus(id));
-    } catch (err) {
-      console.error(`[tuya] не вдалось отримати статус ${id}:`, err);
-    }
-  }
   return result;
 }
 

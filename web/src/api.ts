@@ -5,14 +5,31 @@ export interface Metric {
   unit: string;
 }
 
+/** Стан-перелік: відкрито/закрито, протікання, рух. */
+export interface StateFlag {
+  code: string;
+  key: string;
+  label: string;
+  /** true — потрібна увага (протікання, газ, сіла батарея). */
+  alarm: boolean;
+}
+
+/** Канал багатоклавішного вимикача. */
+export interface Gang {
+  code: string;
+  label: string;
+  on: boolean;
+}
+
 export interface DeviceState {
   id: string;
   name: string;
   kind: 'switch' | 'light' | 'climate' | 'sensor' | 'camera' | 'unknown';
   online: boolean;
-  power: { code: string; on: boolean } | null;
+  gangs: Gang[];
   target: { code: string; value: number; min: number; max: number } | null;
   metrics: Metric[];
+  states: StateFlag[];
 }
 
 export interface Device {

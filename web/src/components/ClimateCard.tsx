@@ -3,16 +3,17 @@ import type { Device } from '../api';
 import { useStore } from '../store';
 
 /**
- * Клімат: поточна температура + керування цільовою.
+ * Клімат: живлення, поточна температура + керування цільовою.
  *
- * Зміни цільової температури дебаунсяться на 800 мс. Без цього кожен
- * тик стрілки був би окремим викликом Tuya API — а квота в Trial-тарифі
- * скінченна.
+ * Крок — 1 °C, бо `temp_set` у цих термостатах цілочисельний і
+ * немасштабований (26 = 26 °C). Зміни дебаунсяться на 800 мс: без цього
+ * кожен тик стрілки був би окремим викликом Tuya API, а квота скінченна.
  */
 export function ClimateCard({ device }: { device: Device }) {
   const sendCommand = useStore((s) => s.sendCommand);
   const state = device.state;
   const target = state?.target;
+  const powerGang = state?.gangs[0];
 
   const [draft, setDraft] = useState<number | null>(target?.value ?? null);
 
@@ -25,8 +26,7 @@ export function ClimateCard({ device }: { device: Device }) {
     if (draft === null || !target || draft === target.value) return;
 
     const timer = setTimeout(() => {
-      // Tuya приймає цілі числа: 23.5 °C передається як 235.
-      void sendCommand(device.id, target.code, Math.round(draft * 10));
+      void sendCommand(device.id, target.code, draft);
     }, 800);
 
     return () => clearTimeout(timer);
@@ -37,30 +37,44 @@ export function ClimateCard({ device }: { device: Device }) {
 
   return (
     <div className={`card${state?.online ? '' : ' card--offline'}`}>
-      <span className="card__name" title={device.name}>
-        {device.name}
-      </span>
-
-      <div className="metric-row">
-        {current && (
-          <div>
-            <div className="metric">
-              <span className="metric__value">{current.value.toFixed(1)}</span>
-              <span className="metric__unit">{current.unit}</span>
-            </div>
-            <span className="card__sub">зараз</span>
-          </div>
-        )}
-        {humidity && (
-          <div>
-            <div className="metric">
-              <span className="metric__value">{humidity.value.toFixed(0)}</span>
-              <span className="metric__unit">{humidity.unit}</span>
-            </div>
-            <span className="card__sub">вологість</span>
-          </div>
+      <div className="row">
+        <span className="card__name" title={device.name}>
+          {device.name}
+        </span>
+        {powerGang && (
+          <button
+            type="button"
+            className="toggle"
+            aria-pressed={powerGang.on}
+            aria-label={`${device.name}: ${powerGang.on ? 'вимкнути' : 'увімкнути'}`}
+            disabled={!state?.online}
+            onClick={() => void sendCommand(device.id, powerGang.code, !powerGang.on)}
+          />
         )}
       </div>
+
+      {(current ?? humidity) && (
+        <div className="metric-row">
+          {current && (
+            <div>
+              <div className="metric">
+                <span className="metric__value">{current.value.toFixed(1)}</span>
+                <span className="metric__unit">{current.unit}</span>
+              </div>
+              <span className="card__sub">зараз</span>
+            </div>
+          )}
+          {humidity && (
+            <div>
+              <div className="metric">
+                <span className="metric__value">{humidity.value.toFixed(0)}</span>
+                <span className="metric__unit">{humidity.unit}</span>
+              </div>
+              <span className="card__sub">вологість</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {target && draft !== null && (
         <>
@@ -68,24 +82,26 @@ export function ClimateCard({ device }: { device: Device }) {
           <div className="stepper">
             <button
               type="button"
-              aria-label="Зменшити на 0.5 градуса"
+              aria-label="Зменшити на 1 градус"
               disabled={!state?.online || draft <= target.min}
-              onClick={() => setDraft((v) => Math.max(target.min, (v ?? target.value) - 0.5))}
+              onClick={() => setDraft((v) => Math.max(target.min, (v ?? target.value) - 1))}
             >
               −
             </button>
-            <span className="stepper__value">{draft.toFixed(1)}°</span>
+            <span className="stepper__value">{draft}°</span>
             <button
               type="button"
-              aria-label="Збільшити на 0.5 градуса"
+              aria-label="Збільшити на 1 градус"
               disabled={!state?.online || draft >= target.max}
-              onClick={() => setDraft((v) => Math.min(target.max, (v ?? target.value) + 0.5))}
+              onClick={() => setDraft((v) => Math.min(target.max, (v ?? target.value) + 1))}
             >
               +
             </button>
           </div>
         </>
       )}
+
+      {!state?.online && <span className="card__sub">не в мережі</span>}
     </div>
   );
 }

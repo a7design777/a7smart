@@ -139,6 +139,28 @@ button {
   opacity: 0.5;
 }
 
+/* Протікання, витік газу, сіла батарея — має впадати в око. */
+.card--alarm {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  opacity: 1;
+}
+
+.alarm-flag {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--danger);
+  letter-spacing: 0.01em;
+}
+
+.state-chip {
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--surface-hi);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
 .card__name {
   font-size: 14px;
   font-weight: 500;

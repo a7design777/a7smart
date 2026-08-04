@@ -17,7 +17,8 @@
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
     "lint": "eslint .",
     "db:migrate": "npm run migrate --workspace server",
-    "tuya:probe": "npm run probe --workspace server"
+    "tuya:probe": "npm run probe --workspace server",
+    "status": "npm run status --workspace server"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

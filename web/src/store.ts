@@ -82,8 +82,16 @@ export const useStore = create<AppState>((set, get) => ({
     // перемикач у UI виглядав би зламаним.
     set((s) => ({
       devices: s.devices.map((d) =>
-        d.id === deviceId && d.state?.power?.code === code
-          ? { ...d, state: { ...d.state, power: { code, on: Boolean(value) } } }
+        d.id === deviceId && d.state
+          ? {
+              ...d,
+              state: {
+                ...d.state,
+                gangs: d.state.gangs.map((g) =>
+                  g.code === code ? { ...g, on: Boolean(value) } : g,
+                ),
+              },
+            }
           : d,
       ),
     }));

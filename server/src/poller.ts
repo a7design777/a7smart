@@ -42,12 +42,34 @@ export async function syncDevices(): Promise<number> {
   return devices.length;
 }
 
+/**
+ * Кожен N-й цикл перечитуємо каталог пристроїв із Tuya. При інтервалі
+ * 5 хв це раз на годину — нові пристрої підхоплюються самі, а зайвих
+ * викликів у квоту не йде.
+ */
+const CATALOG_REFRESH_EVERY = 12;
+
+let cycle = 0;
+let catalogCache: Awaited<ReturnType<typeof listDevices>> = [];
+
 async function pollOnce(): Promise<void> {
+  if (cycle % CATALOG_REFRESH_EVERY === 0 || catalogCache.length === 0) {
+    catalogCache = await listDevices();
+    await upsertDevices(
+      catalogCache.map((d) => ({
+        id: d.id,
+        name: d.name,
+        category: d.category,
+        kind: normalize(d, []).kind,
+      })),
+    );
+  }
+  cycle++;
+
   const rows = await listEnabledDevices();
   if (rows.length === 0) return;
 
-  const tuyaDevices = await listDevices();
-  const byId = new Map(tuyaDevices.map((d) => [d.id, d]));
+  const byId = new Map(catalogCache.map((d) => [d.id, d]));
 
   const statuses = await getDevicesStatus(rows.map((r) => r.tuya_id));
 

@@ -2,51 +2,76 @@ import { useState } from 'react';
 import type { Device } from '../api';
 import { useStore } from '../store';
 
-/** Розетка, вимикач або лампа — усе, що має головний перемикач. */
+/**
+ * Розетка, вимикач або лампа.
+ *
+ * Двоклавішні вимикачі (`switch_1` + `switch_2`) показуються як два
+ * незалежні перемикачі — в акаунті таких п'ять.
+ */
 export function SwitchCard({ device }: { device: Device }) {
   const sendCommand = useStore((s) => s.sendCommand);
-  const [busy, setBusy] = useState(false);
+  const [busyCode, setBusyCode] = useState<string | null>(null);
   const state = device.state;
-  const power = state?.power;
+  const gangs = state?.gangs ?? [];
 
-  if (!power) return null;
+  if (gangs.length === 0) return null;
 
   const powerMetric = state?.metrics.find((m) => m.key === 'power');
+  const energyMetric = state?.metrics.find((m) => m.key === 'energy');
 
-  async function toggle() {
-    if (!power) return;
-    setBusy(true);
+  async function toggle(code: string, on: boolean) {
+    setBusyCode(code);
     try {
-      await sendCommand(device.id, power.code, !power.on);
+      await sendCommand(device.id, code, !on);
     } finally {
-      setBusy(false);
+      setBusyCode(null);
     }
   }
 
   return (
     <div className={`card${state?.online ? '' : ' card--offline'}`}>
-      <div className="row">
-        <span className="card__name" title={device.name}>
-          {device.name}
-        </span>
-        <button
-          type="button"
-          className="toggle"
-          aria-pressed={power.on}
-          aria-label={`${device.name}: ${power.on ? 'вимкнути' : 'увімкнути'}`}
-          disabled={busy || !state?.online}
-          onClick={() => void toggle()}
-        />
-      </div>
+      <span className="card__name" title={device.name}>
+        {device.name}
+      </span>
 
-      {powerMetric ? (
-        <div className="metric">
-          <span className="metric__value">{powerMetric.value.toFixed(0)}</span>
-          <span className="metric__unit">{powerMetric.unit}</span>
+      {gangs.map((gang) => (
+        <div className="row" key={gang.code}>
+          <span className="card__sub">{gang.label}</span>
+          <button
+            type="button"
+            className="toggle"
+            aria-pressed={gang.on}
+            aria-label={`${device.name}, ${gang.label}: ${gang.on ? 'вимкнути' : 'увімкнути'}`}
+            disabled={busyCode === gang.code || !state?.online}
+            onClick={() => void toggle(gang.code, gang.on)}
+          />
         </div>
-      ) : (
-        <span className="card__sub">{state?.online ? 'у мережі' : 'не в мережі'}</span>
+      ))}
+
+      {(powerMetric ?? energyMetric) && (
+        <div className="metric-row">
+          {powerMetric && (
+            <div>
+              <div className="metric">
+                <span className="metric__value">{powerMetric.value.toFixed(0)}</span>
+                <span className="metric__unit">{powerMetric.unit}</span>
+              </div>
+              <span className="card__sub">зараз</span>
+            </div>
+          )}
+          {energyMetric && (
+            <div>
+              <div className="metric">
+                <span className="metric__value">{energyMetric.value.toFixed(2)}</span>
+                <span className="metric__unit">{energyMetric.unit}</span>
+              </div>
+              <span className="card__sub">спожито</span>
+            </div>
+          )}
+        </div>
       )}
+
+      {!state?.online && <span className="card__sub">не в мережі</span>}
     </div>
   );
 }
