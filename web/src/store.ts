@@ -22,8 +22,12 @@ interface AppState {
   sendCommand: (deviceId: string, code: string, value: unknown) => Promise<void>;
   addApartment: (name: string) => Promise<void>;
   removeApartment: (id: number) => Promise<void>;
+  setMain: (id: number) => Promise<void>;
   assign: (deviceId: string, apartmentId: number | null) => Promise<void>;
 }
+
+/** Вибір квартири робиться один раз за сесію — далі не перебиваємо користувача. */
+let apartmentChosen = false;
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -51,19 +55,28 @@ export const useStore = create<AppState>((set, get) => ({
   async refresh() {
     try {
       const [apartments, devices] = await Promise.all([api.apartments(), api.devices()]);
-      set((s) => ({
-        apartments,
-        devices,
-        authed: true,
-        loading: false,
-        error: null,
-        // Якщо обрана квартира зникла (видалили тут або в іншій вкладці),
-        // повертаємось до «Усі». Інакше дашборд лишився б порожнім, а
-        // вкладки, щоб перемкнутися назад, уже не існує.
-        activeApartmentId: apartments.some((a) => a.id === s.activeApartmentId)
-          ? s.activeApartmentId
-          : null,
-      }));
+
+      set((s) => {
+        // При першому завантаженні відкриваємо головну квартиру.
+        // Далі вибір користувача не чіпаємо — інакше кожні 15 секунд
+        // дашборд перекидало б назад на головну.
+        let active = s.activeApartmentId;
+        if (!apartmentChosen && apartments.length > 0) {
+          active = apartments.find((a) => a.is_main)?.id ?? null;
+          apartmentChosen = true;
+        }
+
+        return {
+          apartments,
+          devices,
+          authed: true,
+          loading: false,
+          error: null,
+          // Якщо обрана квартира зникла (видалили тут або в іншій вкладці),
+          // повертаємось до «Усі»: вкладки, щоб перемкнутися назад, уже немає.
+          activeApartmentId: apartments.some((a) => a.id === active) ? active : null,
+        };
+      });
 
       if (!refreshTimer) {
         refreshTimer = setInterval(() => {
@@ -133,6 +146,18 @@ export const useStore = create<AppState>((set, get) => ({
       ),
       activeApartmentId: s.activeApartmentId === id ? null : s.activeApartmentId,
     }));
+  },
+
+  async setMain(id) {
+    set((s) => ({
+      apartments: s.apartments.map((a) => ({ ...a, is_main: a.id === id })),
+    }));
+    try {
+      await api.setMainApartment(id);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      await get().refresh();
+    }
   },
 
   async assign(deviceId, apartmentId) {

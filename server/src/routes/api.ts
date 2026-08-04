@@ -21,6 +21,7 @@ import {
   assignDevice,
   renameDevice,
   getEnergyByApartment,
+  setMainApartment,
 } from '../db/queries.js';
 
 export const api = new Hono();
@@ -100,6 +101,13 @@ api.patch('/apartments/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (!parsed.success || !Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
   await renameApartment(id, parsed.data.name);
+  return c.json({ ok: true });
+});
+
+api.patch('/apartments/:id/main', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+  await setMainApartment(id);
   return c.json({ ok: true });
 });
 

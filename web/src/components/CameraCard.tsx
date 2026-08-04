@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { api, type Device } from '../api';
 
@@ -8,12 +8,31 @@ import { api, type Device } from '../api';
  * URL потоку видається Tuya на короткий час, тому запитується лише коли
  * користувач натиснув «Дивитись», і не кешується. Потік грає браузер —
  * транскодингу на сервері немає, інакше 1 vCPU просто ляже.
+ *
+ * Відтворення запускається явно: атрибут autoplay спрацьовує при
+ * початковому завантаженні джерела, а hls.js підключає потік пізніше,
+ * після монтування елемента — і відео лишалося б на паузі з готовим
+ * першим кадром.
  */
 export function CameraCard({ device }: { device: Device }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Браузер може відхилити автозапуск — тоді потрібен явний жест. */
+  const [needsGesture, setNeedsGesture] = useState(false);
+
+  const play = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      await video.play();
+      setNeedsGesture(false);
+    } catch {
+      // Не помилка потоку: політика автозапуску вимагає дії користувача.
+      setNeedsGesture(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -24,6 +43,7 @@ export function CameraCard({ device }: { device: Device }) {
     async function start() {
       setLoading(true);
       setError(null);
+      setNeedsGesture(false);
       try {
         const { url } = await api.cameraStream(device.id);
         if (cancelled) return;
@@ -32,15 +52,17 @@ export function CameraCard({ device }: { device: Device }) {
         if (!video) return;
 
         if (Hls.isSupported()) {
-          hls = new Hls({ lowLatencyMode: true });
+          hls = new Hls();
           hls.loadSource(url);
           hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => void play());
           hls.on(Hls.Events.ERROR, (_evt, data) => {
-            if (data.fatal) setError('Потік обірвався');
+            if (data.fatal) setError(`Потік обірвався (${data.type})`);
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           // Safari грає HLS нативно, hls.js там не потрібен.
           video.src = url;
+          video.addEventListener('loadedmetadata', () => void play(), { once: true });
         } else {
           setError('Браузер не підтримує HLS');
         }
@@ -59,7 +81,7 @@ export function CameraCard({ device }: { device: Device }) {
       cancelled = true;
       hls?.destroy();
     };
-  }, [active, device.id]);
+  }, [active, device.id, play]);
 
   return (
     <div className="card camera">
@@ -72,15 +94,32 @@ export function CameraCard({ device }: { device: Device }) {
         </button>
       </div>
 
-      {active ? (
-        <>
-          <video ref={videoRef} autoPlay muted playsInline controls />
-          {loading && <span className="card__sub">під'єднання…</span>}
-          {error && <span className="card__sub">{error}</span>}
-        </>
-      ) : (
-        <div className="camera__placeholder">Потік вимкнено</div>
-      )}
+      <div className="camera__frame">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          controls
+          style={{ display: active ? 'block' : 'none' }}
+        />
+
+        {!active && <div className="camera__placeholder">Потік вимкнено</div>}
+
+        {active && needsGesture && (
+          <button
+            type="button"
+            className="camera__play"
+            onClick={() => void play()}
+            aria-label="Відтворити"
+          >
+            ▶
+          </button>
+        )}
+      </div>
+
+      {loading && <span className="card__sub">під'єднання…</span>}
+      {error && <span className="card__sub">{error}</span>}
     </div>
   );
 }

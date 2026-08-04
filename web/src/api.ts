@@ -45,6 +45,8 @@ export interface Apartment {
   slug: string;
   name: string;
   sort_order: number;
+  /** Головна квартира — відкривається одразу при вході. */
+  is_main: boolean;
 }
 
 export interface HistoryPoint {
@@ -115,6 +117,9 @@ export const api = {
 
   deleteApartment: (id: number) =>
     request<{ ok: true }>(`/apartments/${id}`, { method: 'DELETE' }),
+
+  setMainApartment: (id: number) =>
+    request<{ ok: true }>(`/apartments/${id}/main`, { method: 'PATCH' }),
 
   assignDevice: (deviceId: string, apartmentId: number | null) =>
     request<{ ok: true }>(`/devices/${deviceId}/apartment`, {

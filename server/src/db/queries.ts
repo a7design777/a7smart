@@ -20,14 +20,27 @@ export interface ApartmentRow {
   slug: string;
   name: string;
   sort_order: number;
+  is_main: boolean;
 }
 
 export function listApartments(): Promise<ApartmentRow[]> {
   return sql<ApartmentRow[]>`
-    SELECT id, slug, name, sort_order
+    SELECT id, slug, name, sort_order, is_main
     FROM apartments
-    ORDER BY sort_order, name
+    ORDER BY is_main DESC, sort_order, name
   `;
+}
+
+/**
+ * Призначити головну квартиру. Знімається з попередньої в тій самій
+ * транзакції: частковий унікальний індекс не дозволить двох головних,
+ * і без цього другий UPDATE впав би.
+ */
+export async function setMainApartment(id: number): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx`UPDATE apartments SET is_main = FALSE WHERE is_main`;
+    await tx`UPDATE apartments SET is_main = TRUE WHERE id = ${id}`;
+  });
 }
 
 export async function createApartment(name: string): Promise<ApartmentRow> {
@@ -40,13 +53,16 @@ export async function createApartment(name: string): Promise<ApartmentRow> {
       .replace(/^-|-$/g, '') || 'apt';
 
   const rows = await sql<ApartmentRow[]>`
-    INSERT INTO apartments (slug, name, sort_order)
+    INSERT INTO apartments (slug, name, sort_order, is_main)
     VALUES (
       ${base} || '-' || (SELECT coalesce(max(id), 0) + 1 FROM apartments)::text,
       ${name},
-      (SELECT coalesce(max(sort_order), 0) + 1 FROM apartments)
+      (SELECT coalesce(max(sort_order), 0) + 1 FROM apartments),
+      -- Перша створена квартира одразу стає головною: інакше після
+      -- створення однієї дашборд усе одно відкривався б на «Усі».
+      (SELECT count(*) = 0 FROM apartments)
     )
-    RETURNING id, slug, name, sort_order
+    RETURNING id, slug, name, sort_order, is_main
   `;
   return rows[0]!;
 }

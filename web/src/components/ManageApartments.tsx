@@ -20,6 +20,7 @@ export function ManageApartments() {
   const devices = useStore((s) => s.devices);
   const addApartment = useStore((s) => s.addApartment);
   const removeApartment = useStore((s) => s.removeApartment);
+  const setMain = useStore((s) => s.setMain);
   const assign = useStore((s) => s.assign);
 
   const [name, setName] = useState('');
@@ -53,7 +54,11 @@ export function ManageApartments() {
     }
   }
 
-  const renderZone = (zoneId: string, title: string, onDelete?: () => void) => {
+  const renderZone = (
+    zoneId: string,
+    title: string,
+    actions?: { isMain: boolean; onMain: () => void; onDelete: () => void },
+  ) => {
     const list = byApartment.get(zoneId) ?? [];
     return (
       <div
@@ -62,21 +67,28 @@ export function ManageApartments() {
         className={`dropzone${overZone === zoneId ? ' dropzone--over' : ''}`}
       >
         <div className="dropzone__head">
-          <span className="dropzone__title">{title}</span>
-          <span className="card__sub">
-            {list.length}
-            {onDelete && (
-              <button
-                type="button"
-                className="ghost-btn"
-                style={{ marginLeft: 8 }}
-                onClick={onDelete}
-              >
-                Видалити
-              </button>
-            )}
+          <span className="dropzone__title">
+            {title}
+            {actions?.isMain && <span className="badge-main">головна</span>}
           </span>
+          <span className="card__sub">{list.length}</span>
         </div>
+
+        {actions && (
+          <div className="dropzone__actions">
+            <button
+              type="button"
+              className={`ghost-btn${actions.isMain ? ' ghost-btn--active' : ''}`}
+              onClick={actions.onMain}
+              disabled={actions.isMain}
+            >
+              {actions.isMain ? 'Відкривається першою' : 'Зробити головною'}
+            </button>
+            <button type="button" className="ghost-btn" onClick={actions.onDelete}>
+              Видалити
+            </button>
+          </div>
+        )}
 
         <div className="chip-list">
           {list.length === 0 ? (
@@ -114,10 +126,14 @@ export function ManageApartments() {
       </form>
 
       {apartments.map((a) =>
-        renderZone(String(a.id), a.name, () => {
-          if (confirm(`Видалити «${a.name}»? Пристрої повернуться в «Без квартири».`)) {
-            void removeApartment(a.id);
-          }
+        renderZone(String(a.id), a.name, {
+          isMain: a.is_main,
+          onMain: () => void setMain(a.id),
+          onDelete: () => {
+            if (confirm(`Видалити «${a.name}»? Пристрої повернуться в «Без квартири».`)) {
+              void removeApartment(a.id);
+            }
+          },
         }),
       )}
 

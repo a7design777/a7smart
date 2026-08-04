@@ -149,7 +149,7 @@ export function App() {
 
       {view === 'energy' && (
         <Suspense fallback={<div className="empty">Завантаження…</div>}>
-          <EnergyView apartments={apartments} />
+          <EnergyView apartments={apartments} activeApartmentId={activeApartmentId} />
         </Suspense>
       )}
 

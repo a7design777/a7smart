@@ -3,7 +3,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -22,7 +21,25 @@ const COLORS = ['#213ccc', '#728557', '#a86a2c', '#7b4fb5', '#2c8ba8', '#c62b3f'
 
 const UNASSIGNED_KEY = 'none';
 
-export function EnergyView({ apartments }: { apartments: Apartment[] }) {
+/**
+ * Підбір одиниці під масштаб даних.
+ *
+ * Розетки за годину дають соті частки кіловат-години, і вісь із
+ * підписами «0.003» нечитабельна. Тому при малих значеннях переходимо
+ * на ват-години.
+ */
+function pickUnit(maxValue: number): { unit: string; factor: number; digits: number } {
+  if (maxValue > 0 && maxValue < 1) return { unit: 'Вт·год', factor: 1000, digits: 0 };
+  return { unit: 'кВт·год', factor: 1, digits: maxValue < 10 ? 2 : 1 };
+}
+
+export function EnergyView({
+  apartments,
+  activeApartmentId,
+}: {
+  apartments: Apartment[];
+  activeApartmentId: number | null;
+}) {
   const [days, setDays] = useState<number>(7);
   const [raw, setRaw] = useState<EnergyBucket[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -50,10 +67,21 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
     };
   }, [days]);
 
-  /** Серії — квартири, які реально дали дані. */
+  /**
+   * Дані вибраної квартири. Раніше вкладки квартир висіли над цим
+   * екраном, але нічого не робили — виглядало як зламаний фільтр.
+   */
+  const scoped = useMemo(
+    () =>
+      activeApartmentId === null
+        ? raw
+        : raw.filter((r) => r.apartment_id === activeApartmentId),
+    [raw, activeApartmentId],
+  );
+
   const series = useMemo(() => {
     const present = new Set(
-      raw.map((r) => (r.apartment_id === null ? UNASSIGNED_KEY : String(r.apartment_id))),
+      scoped.map((r) => (r.apartment_id === null ? UNASSIGNED_KEY : String(r.apartment_id))),
     );
     const list = apartments
       .filter((a) => present.has(String(a.id)))
@@ -62,35 +90,37 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
       list.push({ key: UNASSIGNED_KEY, name: 'Без квартири' });
     }
     return list;
-  }, [raw, apartments]);
-
-  /** Півот: рядок на часовий інтервал, колонка на квартиру. */
-  const chartData = useMemo(() => {
-    const byBucket = new Map<string, Record<string, number | string>>();
-    for (const row of raw) {
-      const key = row.apartment_id === null ? UNASSIGNED_KEY : String(row.apartment_id);
-      const existing = byBucket.get(row.bucket) ?? { bucket: row.bucket };
-      existing[key] = Number(row.kwh);
-      byBucket.set(row.bucket, existing);
-    }
-    return [...byBucket.values()].sort((a, b) =>
-      String(a.bucket).localeCompare(String(b.bucket)),
-    );
-  }, [raw]);
+  }, [scoped, apartments]);
 
   const totals = useMemo(() => {
     const map = new Map<string, number>();
-    for (const row of raw) {
+    for (const row of scoped) {
       const key = row.apartment_id === null ? UNASSIGNED_KEY : String(row.apartment_id);
       map.set(key, (map.get(key) ?? 0) + Number(row.kwh));
     }
     return map;
-  }, [raw]);
+  }, [scoped]);
 
   const grandTotal = useMemo(
     () => [...totals.values()].reduce((sum, v) => sum + v, 0),
     [totals],
   );
+
+  const { unit, factor, digits } = pickUnit(grandTotal);
+
+  /** Півот: рядок на часовий інтервал, колонка на квартиру. */
+  const chartData = useMemo(() => {
+    const byBucket = new Map<string, Record<string, number | string>>();
+    for (const row of scoped) {
+      const key = row.apartment_id === null ? UNASSIGNED_KEY : String(row.apartment_id);
+      const existing = byBucket.get(row.bucket) ?? { bucket: row.bucket };
+      existing[key] = Number(row.kwh) * factor;
+      byBucket.set(row.bucket, existing);
+    }
+    return [...byBucket.values()].sort((a, b) =>
+      String(a.bucket).localeCompare(String(b.bucket)),
+    );
+  }, [scoped, factor]);
 
   const formatTick = (value: string) => {
     const d = new Date(value);
@@ -98,6 +128,14 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
       ? d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
       : d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
   };
+
+  /** Компактні підписи осі: 1200 → «1.2k». */
+  const formatAxis = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v)));
+
+  const scopeName =
+    activeApartmentId === null
+      ? 'усі квартири'
+      : (apartments.find((a) => a.id === activeApartmentId)?.name ?? '');
 
   return (
     <>
@@ -119,13 +157,15 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
       {error && <div className="banner">{error}</div>}
 
       <div className="card">
-        <span className="card__sub">Спожито за період</span>
+        <span className="card__sub">Спожито за період · {scopeName}</span>
         <div className="energy-total">
-          <span className="energy-total__value">{grandTotal.toFixed(2)}</span>
-          <span className="metric__unit">кВт·год</span>
+          <span className="energy-total__value">
+            {(grandTotal * factor).toFixed(digits)}
+          </span>
+          <span className="metric__unit">{unit}</span>
         </div>
 
-        {series.length > 0 && (
+        {series.length > 1 && (
           <div className="legend">
             {series.map((s, i) => (
               <span className="legend__item" key={s.key}>
@@ -133,7 +173,7 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
                   className="legend__swatch"
                   style={{ background: COLORS[i % COLORS.length] }}
                 />
-                {s.name} — {(totals.get(s.key) ?? 0).toFixed(2)} кВт·год
+                {s.name} — {((totals.get(s.key) ?? 0) * factor).toFixed(digits)} {unit}
               </span>
             ))}
           </div>
@@ -144,23 +184,29 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
         <div className="empty">Рахуємо…</div>
       ) : chartData.length === 0 ? (
         <div className="empty">
-          Даних ще немає. Споживання рахується з показників розеток із вимірюванням
-          потужності — перші точки з'являться за кілька циклів опитування.
+          Даних за цей період немає. Споживання рахується з розеток із вимірюванням
+          потужності — перевірте, чи є такі в обраній квартирі.
         </div>
       ) : (
         <div className="card" style={{ marginTop: 12 }}>
           <div className="chart-wrap">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
+              <BarChart data={chartData} margin={{ top: 4, right: 2, bottom: 0, left: 2 }}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
                 <XAxis
                   dataKey="bucket"
                   tickFormatter={formatTick}
                   stroke="var(--muted)"
-                  fontSize={11}
-                  minTickGap={26}
+                  fontSize={10}
+                  minTickGap={20}
+                  tickMargin={4}
                 />
-                <YAxis stroke="var(--muted)" fontSize={11} width={44} />
+                <YAxis
+                  stroke="var(--muted)"
+                  fontSize={10}
+                  width={34}
+                  tickFormatter={formatAxis}
+                />
                 <Tooltip
                   contentStyle={{
                     background: 'var(--surface)',
@@ -170,9 +216,8 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
                     color: 'var(--text)',
                   }}
                   labelFormatter={(v: string) => new Date(v).toLocaleString('uk-UA')}
-                  formatter={(v: number, n: string) => [`${v.toFixed(3)} кВт·год`, n]}
+                  formatter={(v: number, n: string) => [`${v.toFixed(digits)} ${unit}`, n]}
                 />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
                 {series.map((s, i) => (
                   <Bar
                     key={s.key}
@@ -186,6 +231,7 @@ export function EnergyView({ apartments }: { apartments: Apartment[] }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <span className="card__sub">Вісь Y — {unit}</span>
         </div>
       )}
 
