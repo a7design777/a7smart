@@ -1,0 +1,28 @@
+# Продакшн-стек a7smart: інтегрується в наявний Traefik (n8n-docker_default).
+# Сусідні контейнери (n8n, flowise, a7cms) не зачіпаються.
+# Образ збирається в GitHub Actions і тягнеться з GHCR — на 1 vCPU
+# локальний білд надто дорогий.
+services:
+  app:
+    image: ghcr.io/a7design777/a7smart:latest
+    container_name: a7smart
+    restart: unless-stopped
+    env_file: .env.production
+    # Захист сусідів: сервер легкий, 256 MB з запасом вистачає.
+    mem_limit: 256m
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=n8n-docker_default"
+      - "traefik.http.routers.a7smart.rule=Host(`smart.zvyazok.com`)"
+      - "traefik.http.routers.a7smart.entrypoints=web,websecure"
+      - "traefik.http.routers.a7smart.tls=true"
+      - "traefik.http.routers.a7smart.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.a7smart.loadbalancer.server.port=3000"
+
+networks:
+  # Наявна мережа Traefik — приєднуємось як зовнішні, не перестворюємо.
+  traefik:
+    name: n8n-docker_default
+    external: true

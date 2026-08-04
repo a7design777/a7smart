@@ -1,0 +1,343 @@
+:root {
+  --bg: #0f1115;
+  --surface: #181b22;
+  --surface-hi: #212632;
+  --border: #2a3040;
+  --text: #e8ecf4;
+  --muted: #8b94a8;
+  --accent: #4f8cff;
+  --warm: #ff9f45;
+  --danger: #ff5c5c;
+  --ok: #3ddc97;
+  --radius: 14px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ── Layout ─────────────────────────────────────────────── */
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px 14px 40px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.topbar h1 {
+  font-size: 19px;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.ghost-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ghost-btn:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+/* Вкладки квартир — горизонтальний скрол на вузьких екранах */
+.tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 15px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.section-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 22px 0 10px;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.grid--wide {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* ── Cards ──────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.card--offline {
+  opacity: 0.5;
+}
+
+.card__name {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card__sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.metric {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.metric__value {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.metric__unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Toggle ─────────────────────────────────────────────── */
+
+.toggle {
+  position: relative;
+  width: 50px;
+  height: 29px;
+  border-radius: 999px;
+  border: none;
+  background: var(--surface-hi);
+  transition: background 0.18s ease;
+  flex: 0 0 auto;
+}
+
+.toggle[aria-pressed='true'] {
+  background: var(--ok);
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s ease;
+}
+
+.toggle[aria-pressed='true']::after {
+  transform: translateX(21px);
+}
+
+.toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ── Climate ────────────────────────────────────────────── */
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stepper button {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-hi);
+  font-size: 19px;
+  line-height: 1;
+}
+
+.stepper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stepper__value {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  min-width: 74px;
+  text-align: center;
+  color: var(--warm);
+}
+
+/* ── Camera ─────────────────────────────────────────────── */
+
+.camera video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.camera__placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 12px;
+}
+
+/* ── Login ──────────────────────────────────────────────── */
+
+.login {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.login form {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  font: inherit;
+}
+
+.login input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.login button[type='submit'] {
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  color: #fff;
+  font-weight: 500;
+}
+
+.login button[type='submit']:disabled {
+  opacity: 0.5;
+}
+
+/* ── Misc ───────────────────────────────────────────────── */
+
+.banner {
+  background: color-mix(in srgb, var(--danger) 15%, var(--surface));
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 28px 0;
+  text-align: center;
+}
+
+.chart-wrap {
+  height: 190px;
+  margin-top: 4px;
+}
