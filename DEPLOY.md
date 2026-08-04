@@ -81,25 +81,64 @@ UPDATE devices SET apartment_id = 1 WHERE tuya_id IN ('bf1234…', 'bf5678…');
 
 ## Крок 6. GitHub
 
-Репозиторій: [a7design777/a7smart](https://github.com/a7design777/a7smart).
+Репозиторій: [a7design777/a7smart](https://github.com/a7design777/a7smart) — приватний.
 Пуш у `main` запускає `.github/workflows/deploy.yml`, який кладе образ у
 `ghcr.io/a7design777/a7smart:latest`.
 
-Якщо репо приватне — образ у GHCR теж приватний, тож на сервері потрібен логін
-(PAT з правом `read:packages`):
+Приватне репо потребує **двох різних доступів** — їх легко переплутати:
+
+| Що | Навіщо | Чим |
+|---|---|---|
+| Код на сервері | `docker-compose.prod.yml` + оновлення через `git pull` | Deploy key |
+| Образ із GHCR | `docker pull` | Публічний пакет або PAT |
+
+**Deploy key не автентифікує до GHCR** — це тільки git.
+
+### 6.1. Deploy key
+
+Генерувати на сервері, щоб приватна частина нікуди не подорожувала:
 
 ```bash
-echo <GITHUB_PAT> | docker login ghcr.io -u a7design777 --password-stdin
+ssh-keygen -t ed25519 -C "a7smart-deploy" -f ~/.ssh/a7smart_deploy -N ""
+```
+
+Вміст `~/.ssh/a7smart_deploy.pub` додати в
+[Settings → Deploy keys](https://github.com/a7design777/a7smart/settings/keys)
+→ *Add deploy key*. **Write access не вмикати** — серверу потрібне лише читання.
+
+Прив'язати ключ до хоста:
+
+```bash
+printf 'Host github-a7smart\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/a7smart_deploy\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+```
+
+### 6.2. Доступ до образу
+
+Найпростіше — зробити пакет публічним після першої збірки
+(Packages → `a7smart` → Package settings → Change visibility → Public).
+Образ секретів не містить: усі ключі підставляються з `.env.production`
+під час запуску.
+
+Якщо пакет має лишитися приватним — PAT зі скоупом `read:packages`:
+
+```bash
+docker login ghcr.io -u a7design777
 ```
 
 ## Крок 7. Сервер
 
 ```bash
-mkdir -p /root/a7smart && cd /root/a7smart
+git clone github-a7smart:a7design777/a7smart.git /root/a7smart && cd /root/a7smart
 ```
 
-Покласти туди `docker-compose.prod.yml` і `.env.production` (той самий вміст, що й
-локальний `.env`, але `NODE_ENV=production`). Запуск:
+Створити `.env.production` — вміст той самий, що й у локальному `.env`,
+але `NODE_ENV=production`:
+
+```bash
+nano .env.production
+```
+
+Запуск:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
@@ -138,8 +177,11 @@ curl -s https://smart.zvyazok.com/api/health
 Пуш у `main` → Actions збирає образ → на сервері:
 
 ```bash
-cd /root/a7smart && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+cd /root/a7smart && git pull && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
 ```
+
+`git pull` потрібен лише коли змінювався сам `docker-compose.prod.yml`;
+код застосунку приїжджає всередині образу.
 
 ## Зупинка (сусідів не зачіпає)
 
