@@ -32,6 +32,12 @@ FROM base AS runtime
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# Мітка збірки. Без неї неможливо відрізнити «оновилось» від «здається,
+# оновилось»: docker pull мовчки віддає попередній latest, якщо збірка
+# ще не завершилась. Видно в /api/health.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
+
 COPY --from=deps  /app/node_modules        ./node_modules
 COPY --from=build /app/server/dist         ./server/dist
 COPY --from=build /app/server/migrations   ./server/migrations

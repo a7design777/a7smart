@@ -67,6 +67,10 @@ api.post('/logout', (c) => {
  */
 api.get('/health', (c) =>
   c.json({
+    // Комміт, з якого зібрано образ. Перше, що треба звіряти, коли
+    // «оновив, але змін не видно»: docker pull мовчки віддає попередній
+    // latest, якщо збірка в CI ще не завершилась.
+    version: process.env.GIT_SHA ?? 'unknown',
     ok: !health.authProblem,
     lastPollAt: health.lastPollAt,
     lastError: health.lastError,
