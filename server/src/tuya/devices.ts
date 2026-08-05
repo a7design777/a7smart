@@ -43,15 +43,102 @@ interface BatchStatusEntry {
 const BATCH_SIZE = 20;
 
 /**
- * Статуси кількох пристроїв пачками — головний спосіб економити квоту
- * Tuya API. При 47 пристроях це 3 виклики замість 47.
+ * Спосіб читання статусів.
  *
- * Використовується саме `/v1.0/iot-03/devices/status`: він віддає масив
- * `{id, status}`. Схожий `/v1.0/devices/status` повертає об'єкт, ключований
- * за id — інша структура, легко переплутати.
+ * Набір доступних ендпоїнтів залежить від середовища: з одного IP
+ * `/v1.0/iot-03/devices/status` віддає дані, з іншого — 1106 permission
+ * deny, хоча ключі, проєкт і підписки ті самі. Тому стратегія
+ * добирається на місці й запам'ятовується: перебирати варіанти щоцикла
+ * означало б витрачати квоту на завідомо неробочі виклики.
+ */
+type Strategy = 'bulk-v1' | 'bulk-iot03' | 'per-device';
+
+const STRATEGIES: Strategy[] = ['bulk-v1', 'bulk-iot03', 'per-device'];
+
+let strategy: Strategy | null = null;
+
+/** Гуртовий виклик, що повертає об'єкт `{ [deviceId]: status[] }`. */
+async function bulkV1(chunk: string[]): Promise<Map<string, TuyaStatusItem[]>> {
+  const res = await tuyaRequest<Record<string, TuyaStatusItem[]>>({
+    path: '/v1.0/devices/status',
+    method: 'GET',
+    query: { device_ids: chunk.join(',') },
+  });
+  return new Map(Object.entries(res));
+}
+
+/** Гуртовий виклик, що повертає масив `{ id, status }`. */
+async function bulkIot03(chunk: string[]): Promise<Map<string, TuyaStatusItem[]>> {
+  const res = await tuyaRequest<BatchStatusEntry[]>({
+    path: '/v1.0/iot-03/devices/status',
+    method: 'GET',
+    query: { device_ids: chunk.join(',') },
+  });
+  return new Map(res.map((e) => [e.id, e.status]));
+}
+
+/**
+ * Поштучне читання — останній рубіж. Дорого по квоті (виклик на пристрій
+ * замість одного на двадцять), тому про перехід сюди повідомляємо голосно.
+ */
+/**
+ * Пристрої, яким Tuya відмовляє в читанні статусу.
  *
- * Відкату на поштучні запити тут навмисно немає: він тихо перетворив би
- * 3 виклики на 47 і спалив квоту непомітно. Помилка має бути видимою.
+ * Один такий пристрій «отруює» весь гуртовий запит: замість того щоб
+ * пропустити його, Tuya відхиляє пачку цілком із 1106. Тому проблемні
+ * виносяться з пачок і читаються окремо — решта далі йде дешевим
+ * гуртовим шляхом.
+ */
+const problematic = new Set<string>();
+
+async function perDevice(chunk: string[]): Promise<Map<string, TuyaStatusItem[]>> {
+  const result = new Map<string, TuyaStatusItem[]>();
+  const broken: string[] = [];
+
+  const settled = await Promise.allSettled(
+    chunk.map(async (id) => ({ id, status: await getDeviceStatus(id) })),
+  );
+
+  for (const [i, entry] of settled.entries()) {
+    const id = chunk[i]!;
+    if (entry.status === 'fulfilled') {
+      result.set(entry.value.id, entry.value.status);
+      // Пристрій ожив — повертаємо його в гуртові запити.
+      problematic.delete(id);
+    } else {
+      broken.push(id);
+      if (!problematic.has(id)) {
+        problematic.add(id);
+        console.warn(
+          `[tuya] пристрій ${id} не віддає статус — виключено з гуртових запитів`,
+        );
+      }
+    }
+  }
+
+  if (result.size === 0 && broken.length === chunk.length && chunk.length > 1) {
+    throw new Error('жоден пристрій у пачці не віддав статус');
+  }
+  return result;
+}
+
+const RUNNERS: Record<Strategy, (chunk: string[]) => Promise<Map<string, TuyaStatusItem[]>>> = {
+  'bulk-v1': bulkV1,
+  'bulk-iot03': bulkIot03,
+  'per-device': perDevice,
+};
+
+/** Яка стратегія читання статусів зараз діє. Для /api/health. */
+export function getStatusStrategy(): Strategy | null {
+  return strategy;
+}
+
+/**
+ * Статуси кількох пристроїв.
+ *
+ * Стратегія обирається один раз перебором і далі не змінюється, доки
+ * працює. Якщо чинна стратегія відмовила — перебір повторюється: доступ
+ * до ендпоїнтів може змінитися після правок підписок у Tuya.
  */
 export async function getDevicesStatus(
   deviceIds: string[],
@@ -71,15 +158,53 @@ export async function getDevicesStatus(
   }
   if (valid.length === 0) return result;
 
-  for (let i = 0; i < valid.length; i += BATCH_SIZE) {
-    const chunk = valid.slice(i, i + BATCH_SIZE);
-    const batch = await tuyaRequest<BatchStatusEntry[]>({
-      path: '/v1.0/iot-03/devices/status',
-      method: 'GET',
-      query: { device_ids: chunk.join(',') },
-    });
-    for (const entry of batch) {
-      result.set(entry.id, entry.status);
+  // Відомі проблемні читаємо окремо, щоб вони не ламали гуртові пачки.
+  const healthy = valid.filter((id) => !problematic.has(id));
+  const suspect = valid.filter((id) => problematic.has(id));
+
+  if (suspect.length > 0) {
+    for (const [id, status] of await perDevice(suspect)) {
+      result.set(id, status);
+    }
+  }
+
+  for (let i = 0; i < healthy.length; i += BATCH_SIZE) {
+    const chunk = healthy.slice(i, i + BATCH_SIZE);
+
+    // Порядок сталий: від найдешевшого до найдорожчого. Стратегія
+    // навмисно НЕ закріплюється — інакше одна невдала пачка назавжди
+    // перевела б систему на поштучне читання (46 викликів замість 3).
+    // Ціна самовідновлення — до двох марних викликів на пачку, і лише
+    // поки гуртові ендпоїнти недоступні.
+    let chunkResult: Map<string, TuyaStatusItem[]> | null = null;
+    const failures: string[] = [];
+
+    for (const candidate of STRATEGIES) {
+      try {
+        chunkResult = await RUNNERS[candidate](chunk);
+        if (candidate !== strategy) {
+          strategy = candidate;
+          const note =
+            candidate === 'per-device'
+              ? ' — гуртові ендпоїнти недоступні, витрата квоти зросте в рази'
+              : '';
+          console.warn(
+            `[tuya] спосіб читання статусів: ${candidate}${note}` +
+              (failures.length > 0 ? `\n  причина відкату: ${failures.join('; ')}` : ''),
+          );
+        }
+        break;
+      } catch (err) {
+        failures.push(`${candidate}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    if (!chunkResult) {
+      throw new Error(`Жоден спосіб читання статусів не спрацював.\n  ${failures.join('\n  ')}`);
+    }
+
+    for (const [id, status] of chunkResult) {
+      result.set(id, status);
     }
   }
 

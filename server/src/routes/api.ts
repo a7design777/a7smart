@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireAuth, verifyPassword, startSession, endSession } from '../auth.js';
 import { config } from '../config.js';
-import { sendCommands, allocateCameraStream } from '../tuya/devices.js';
+import { sendCommands, allocateCameraStream, getStatusStrategy } from '../tuya/devices.js';
 import { TuyaApiError } from '../tuya/client.js';
 import {
   getAllCachedStates,
@@ -69,6 +69,9 @@ api.get('/health', (c) =>
     lastPollAt: health.lastPollAt,
     lastError: health.lastError,
     tuyaAuthProblem: health.authProblem,
+    // Який ендпоїнт статусів реально працює в цьому середовищі.
+    // 'per-device' означає підвищену витрату квоти Tuya.
+    statusStrategy: getStatusStrategy(),
     // Remihome читається через недокументований інтерфейс, тому його стан
     // корисно бачити окремо: він може відвалитися незалежно від Tuya.
     remihome: health.remihome,
