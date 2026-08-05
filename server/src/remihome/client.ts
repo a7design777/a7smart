@@ -102,11 +102,13 @@ export async function remihomeGet<T>(path: string, retry = true): Promise<T> {
 
 export async function remihomeRequest<T>(
   path: string,
-  method: 'GET' | 'POST' = 'GET',
+  method: 'GET' | 'POST' | 'PUT' = 'GET',
   retry = true,
+  body?: unknown,
 ): Promise<T> {
   const cookie = await getSession();
   const url = `${BASE}/${config.REMIHOME_INSTALLATION}/RemicaHome${path}`;
+  const payload = body === undefined ? undefined : JSON.stringify(body);
 
   const res = await fetch(url, {
     method,
@@ -117,14 +119,16 @@ export async function remihomeRequest<T>(
       // від його власного інтерфейсу.
       'X-Requested-With': 'XMLHttpRequest',
       Referer: `${BASE}/${config.REMIHOME_INSTALLATION}/RemicaHome`,
+      ...(payload ? { 'Content-Type': 'application/json' } : {}),
     },
+    ...(payload ? { body: payload } : {}),
     redirect: 'manual',
   });
 
   // Редирект тут означає «сесія протухла»: API віддає JSON, а не сторінки.
   if (res.status === 401 || res.status === 403 || (res.status >= 300 && res.status < 400)) {
     sessionCookie = null;
-    if (retry) return remihomeRequest<T>(path, method, false);
+    if (retry) return remihomeRequest<T>(path, method, false, body);
     throw new RemihomeError(`Сесію відхилено: ${url}`, res.status);
   }
 
@@ -139,6 +143,8 @@ export async function remihomeRequest<T>(
   }
 
   const text = await res.text();
+  // Керуючі запити можуть відповідати порожнім тілом — це успіх.
+  if (text.trim() === '') return undefined as T;
   try {
     return JSON.parse(text) as T;
   } catch {

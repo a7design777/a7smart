@@ -1,4 +1,4 @@
-import { remihomeGet } from './client.js';
+import { remihomeGet, remihomeRequest } from './client.js';
 
 /** Пристрій у каталозі Remihome. */
 export interface RemihomeDevice {
@@ -48,34 +48,53 @@ export function getRemihomeDeviceStatus(code: string): Promise<RemihomeProperty[
   return remihomeGet<RemihomeProperty[]>(`/devices/${encodeURIComponent(code)}/status`);
 }
 
+interface BulkStatusEntry {
+  code: string;
+  status: RemihomeProperty[];
+}
+
 /**
- * Статуси всіх пристроїв.
+ * Статуси всіх пристроїв одним викликом.
  *
- * Гуртового ендпоїнта знайти не вдалося: `/status` віддає 404, тому
- * читаємо поштучно. При семи пристроях це вісім запитів на цикл —
- * прийнятно, на відміну від Tuya, де таких пристроїв 47.
+ * Шлях `devices/all/status` знайдений у бандлі самого порталу — саме ним
+ * він і користується. Раніше тут було поштучне читання, бо очевидний
+ * `/status` віддає 404 і здавалося, що гуртового варіанта немає.
  *
- * Помилка окремого пристрою не зупиняє решту: недокументований API
- * може відмовити на одному приладі, і це не привід втрачати всі дані.
+ * Помилка не зупиняє Tuya: викликач ловить її окремо.
  */
 export async function getAllRemihomeStatuses(
   codes: string[],
 ): Promise<Map<string, RemihomeProperty[]>> {
-  const result = new Map<string, RemihomeProperty[]>();
-
-  const settled = await Promise.allSettled(
-    codes.map(async (code) => ({ code, props: await getRemihomeDeviceStatus(code) })),
+  const wanted = new Set(codes);
+  const entries = await remihomeGet<BulkStatusEntry[]>(
+    '/devices/all/status?includeHidden=false',
   );
 
-  for (const entry of settled) {
-    if (entry.status === 'fulfilled') {
-      result.set(entry.value.code, entry.value.props);
-    } else {
-      console.warn('[remihome] статус пристрою не отримано:', entry.reason);
-    }
+  const result = new Map<string, RemihomeProperty[]>();
+  for (const entry of entries) {
+    if (wanted.has(entry.code)) result.set(entry.code, entry.status);
   }
-
   return result;
+}
+
+/**
+ * Змінити властивість пристрою.
+ *
+ * Формат узятий із бандла порталу: PUT на той самий шлях, що й читання,
+ * з тілом-масивом `[{name, value}]`. Значення завжди рядок — навіть для
+ * температури.
+ */
+export function setRemihomeProperty(
+  code: string,
+  name: string,
+  value: string,
+): Promise<void> {
+  return remihomeRequest<void>(
+    `/devices/${encodeURIComponent(code)}/status`,
+    'PUT',
+    true,
+    [{ name, value }],
+  );
 }
 
 /** Карта «код пристрою → назва зони». Використовується як підказка в UI. */

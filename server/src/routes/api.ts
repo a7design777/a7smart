@@ -4,6 +4,8 @@ import { requireAuth, verifyPassword, startSession, endSession } from '../auth.j
 import { config } from '../config.js';
 import { sendCommands, allocateCameraStream, getStatusStrategy } from '../tuya/devices.js';
 import { TuyaApiError } from '../tuya/client.js';
+import { setRemihomeProperty } from '../remihome/devices.js';
+import { RemihomeError } from '../remihome/client.js';
 import {
   getAllCachedStates,
   getCachedState,
@@ -150,22 +152,22 @@ api.post('/devices/:id/command', async (c) => {
   const parsed = commandSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
 
-  // Ендпоїнт запису в API Remihome поки не знайдений, тож його пристрої
-  // доступні лише для читання. Краще сказати це прямо, ніж відправити
-  // команду в Tuya й отримати незрозумілу помилку.
-  if (getProvider(c.req.param('id')) === 'remihome') {
-    return c.json(
-      { error: 'read_only', message: 'Пристрої Remihome поки лише для читання' },
-      501,
-    );
-  }
+  const id = c.req.param('id');
 
   try {
-    await sendCommands(c.req.param('id'), [parsed.data]);
+    if (getProvider(id) === 'remihome') {
+      // Remihome приймає значення завжди рядком — навіть температуру.
+      await setRemihomeProperty(id, parsed.data.code, String(parsed.data.value));
+    } else {
+      await sendCommands(id, [parsed.data]);
+    }
     return c.json({ ok: true });
   } catch (err) {
     if (err instanceof TuyaApiError) {
       return c.json({ error: 'tuya_error', code: err.code, message: err.tuyaMessage }, 502);
+    }
+    if (err instanceof RemihomeError) {
+      return c.json({ error: 'remihome_error', message: err.message }, 502);
     }
     throw err;
   }

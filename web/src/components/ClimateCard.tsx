@@ -76,6 +76,26 @@ export function ClimateCard({ device }: { device: Device }) {
         </div>
       )}
 
+      {(state?.options ?? []).map((opt) => (
+        <div key={opt.code}>
+          <span className="card__sub">{opt.label}</span>
+          <div className="segmented" role="group" aria-label={opt.label}>
+            {opt.choices.map((choice) => (
+              <button
+                key={choice.value}
+                type="button"
+                className="segmented__item"
+                aria-pressed={opt.value === choice.value}
+                disabled={!state?.online}
+                onClick={() => void sendCommand(device.id, opt.code, choice.value)}
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
       {target && draft !== null && (
         <>
           <span className="card__sub">цільова</span>

@@ -21,6 +21,14 @@ export interface Gang {
   on: boolean;
 }
 
+/** Керування з переліком варіантів — швидкість фанкойла, режим термостата. */
+export interface OptionControl {
+  code: string;
+  label: string;
+  value: string;
+  choices: Array<{ value: string; label: string }>;
+}
+
 export interface DeviceState {
   id: string;
   name: string;
@@ -30,6 +38,7 @@ export interface DeviceState {
   target: { code: string; value: number; min: number; max: number } | null;
   metrics: Metric[];
   states: StateFlag[];
+  options: OptionControl[];
 }
 
 export interface Device {

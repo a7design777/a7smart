@@ -37,6 +37,17 @@ export interface Gang {
   on: boolean;
 }
 
+/**
+ * Керування з переліком варіантів — швидкість фанкойла, режим термостата.
+ * У Tuya таких поки немає, у Remihome вони описані в метаданих пристрою.
+ */
+export interface OptionControl {
+  code: string;
+  label: string;
+  value: string;
+  choices: Array<{ value: string; label: string }>;
+}
+
 export interface NormalizedDevice {
   id: string;
   name: string;
@@ -48,6 +59,8 @@ export interface NormalizedDevice {
   target: { code: string; value: number; min: number; max: number } | null;
   metrics: Metric[];
   states: StateFlag[];
+  /** Перемикачі з переліком варіантів. Порожньо для більшості пристроїв. */
+  options: OptionControl[];
 }
 
 /** Категорія Tuya → тип пристрою в UI. Звірено з реальним акаунтом. */
@@ -222,6 +235,7 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
         : null,
     metrics,
     states,
+    options: [],
   };
 }
 

@@ -377,6 +377,47 @@ button {
   font-weight: 600;
 }
 
+/* Перемикач варіантів: швидкість фанкойла, режим термостата */
+.segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-hi);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  margin-top: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.segmented::-webkit-scrollbar {
+  display: none;
+}
+
+.segmented__item {
+  flex: 1 1 auto;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-height: 36px;
+  transition: all 0.15s ease;
+}
+
+.segmented__item[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 550;
+}
+
+.segmented__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ── Camera ─────────────────────────────────────────────── */
 
 .camera__frame {

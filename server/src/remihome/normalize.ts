@@ -1,4 +1,11 @@
-import type { NormalizedDevice, Metric, StateFlag, DeviceKind } from '../tuya/normalize.js';
+import type {
+  NormalizedDevice,
+  Metric,
+  StateFlag,
+  DeviceKind,
+  Gang,
+  OptionControl,
+} from '../tuya/normalize.js';
 import type { RemihomeDevice, RemihomeProperty } from './devices.js';
 
 /**
@@ -66,6 +73,17 @@ const PROPERTY_LABELS: Record<string, string> = {
  */
 const HIDDEN_PROPERTIES = new Set(['availability', 'screen', 'interrupter']);
 
+/**
+ * Що дозволено змінювати.
+ *
+ * Метадані позначають `interaction: exec` навіть для суто діагностичних
+ * властивостей — `running_state` (поточна робота) та `interruption_cause`
+ * (причина зупинки). Робити з них органи керування на системі опалення
+ * не можна: користувач натисне «Робота: on», а прилад це проігнорує або,
+ * гірше, сприйме буквально. Тому список явний.
+ */
+const CONTROLLABLE = new Set(['mode', 'speed', 'state', 'setpoint']);
+
 function kindFor(device: RemihomeDevice): DeviceKind {
   const categories = (device.type?.category ?? []).map((c) => String(c).toLowerCase());
   if (categories.some((c) => ['thermostat', 'hvac', 'fancoil'].includes(c))) {
@@ -86,6 +104,8 @@ export function normalizeRemihome(
 
   const metrics: Metric[] = [];
   const states: StateFlag[] = [];
+  const gangs: Gang[] = [];
+  const options: OptionControl[] = [];
   let online = true;
   let target: NormalizedDevice['target'] = null;
 
@@ -101,6 +121,12 @@ export function normalizeRemihome(
     const numeric = Number(prop.value);
     const isNumeric = format in UNIT_BY_FORMAT && Number.isFinite(numeric);
 
+    // Керована = позначена exec У метаданих І дозволена явним списком.
+    const editable = meta?.interaction === 'exec' && CONTROLLABLE.has(prop.name);
+    const choices = Array.isArray(meta?.states)
+      ? (meta.states as Array<{ name?: string; value?: string }>)
+      : [];
+
     if (isNumeric) {
       // Цільова температура — окреме поле моделі, а не звичайний показник.
       if (prop.name === 'setpoint') {
@@ -112,6 +138,30 @@ export function normalizeRemihome(
         key: METRIC_KEYS[prop.name] ?? prop.name,
         value: numeric,
         unit: UNIT_BY_FORMAT[format] ?? '',
+      });
+      continue;
+    }
+
+    // Керований вимикач on/off стає звичайним перемикачем.
+    if (
+      editable &&
+      prop.name === 'state' &&
+      choices.length === 2 &&
+      choices.every((c) => c.value === 'on' || c.value === 'off')
+    ) {
+      gangs.push({ code: prop.name, label: 'Живлення', on: prop.value === 'on' });
+      continue;
+    }
+
+    // Решта керованих переліків — швидкість, режим.
+    if (editable && choices.length > 1) {
+      options.push({
+        code: prop.name,
+        label: PROPERTY_LABELS[prop.name] ?? prop.name,
+        value: prop.value,
+        choices: choices
+          .filter((c): c is { value: string } => typeof c.value === 'string')
+          .map((c) => ({ value: c.value, label: STATE_LABELS[c.value] ?? c.value })),
       });
       continue;
     }
@@ -130,12 +180,10 @@ export function normalizeRemihome(
     name: device.name.trim(),
     kind: kindFor(device),
     online,
-    // Керування поки не реалізоване: ендпоїнт запису в цьому API не
-    // знайдений. Показувати перемикач, який нічого не робить, гірше,
-    // ніж не показувати його зовсім.
-    gangs: [],
+    gangs,
     target,
     metrics,
     states,
+    options,
   };
 }
