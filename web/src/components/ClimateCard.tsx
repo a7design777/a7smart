@@ -11,6 +11,7 @@ import { useStore } from '../store';
  */
 export function ClimateCard({ device }: { device: Device }) {
   const sendCommand = useStore((s) => s.sendCommand);
+  const toggleGang = useStore((s) => s.toggleGang);
   const state = device.state;
   const target = state?.target;
   const powerGang = state?.gangs[0];
@@ -48,7 +49,7 @@ export function ClimateCard({ device }: { device: Device }) {
             aria-pressed={powerGang.on}
             aria-label={`${device.name}: ${powerGang.on ? 'вимкнути' : 'увімкнути'}`}
             disabled={!state?.online}
-            onClick={() => void sendCommand(device.id, powerGang.code, !powerGang.on)}
+            onClick={() => void toggleGang(device.id, powerGang)}
           />
         )}
       </div>

@@ -149,7 +149,15 @@ export function normalizeRemihome(
       choices.length === 2 &&
       choices.every((c) => c.value === 'on' || c.value === 'off')
     ) {
-      gangs.push({ code: prop.name, label: 'Живлення', on: prop.value === 'on' });
+      // Remihome очікує саме рядки "on"/"off" — булеве значення він
+      // мовчки ігнорує, і перемикач у UI відкочується назад.
+      gangs.push({
+        code: prop.name,
+        label: 'Живлення',
+        on: prop.value === 'on',
+        onValue: 'on',
+        offValue: 'off',
+      });
       continue;
     }
 

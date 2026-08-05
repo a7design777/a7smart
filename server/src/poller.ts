@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { listDevices, getDevicesStatus } from './tuya/devices.js';
+import { listDevices, getDevicesStatus, getDeviceStatus } from './tuya/devices.js';
 import { normalize, HISTORICAL_KEYS, type NormalizedDevice } from './tuya/normalize.js';
 import { TuyaApiError } from './tuya/client.js';
 import { isRemihomeConfigured } from './remihome/client.js';
@@ -7,6 +7,7 @@ import {
   listRemihomeDevices,
   getAllRemihomeStatuses,
   getZoneByDevice,
+  getRemihomeDeviceStatus,
 } from './remihome/devices.js';
 import { normalizeRemihome } from './remihome/normalize.js';
 import {
@@ -51,6 +52,38 @@ export function getProvider(deviceId: string): Provider | null {
   if (tuyaCatalog.some((d) => d.id === deviceId)) return 'tuya';
   if (remihomeCatalog.some((d) => d.code === deviceId)) return 'remihome';
   return null;
+}
+
+/**
+ * Перечитати стан одного пристрою просто зараз.
+ *
+ * Викликається після команди. Без цього дашборд ще до п'яти хвилин
+ * показував би старе значення з кешу — перемикач вмикався б і одразу
+ * «відкочувався», хоча прилад уже виконав команду.
+ */
+export async function refreshDevice(deviceId: string): Promise<void> {
+  const provider = getProvider(deviceId);
+
+  if (provider === 'remihome') {
+    const device = remihomeCatalog.find((d) => d.code === deviceId);
+    if (!device) return;
+    const props = await getRemihomeDeviceStatus(deviceId);
+    const cached = stateCache.get(deviceId);
+    stateCache.set(
+      deviceId,
+      normalizeRemihome({ ...device, name: cached?.name ?? device.name }, props),
+    );
+    return;
+  }
+
+  const device = tuyaCatalog.find((d) => d.id === deviceId);
+  if (!device) return;
+  const status = await getDeviceStatus(deviceId);
+  const cached = stateCache.get(deviceId);
+  stateCache.set(
+    deviceId,
+    normalize({ ...device, name: cached?.name ?? device.name }, status),
+  );
 }
 
 const CATALOG_REFRESH_EVERY = 12;

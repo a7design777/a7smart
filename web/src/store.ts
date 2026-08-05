@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, UnauthorizedError, type Apartment, type Device } from './api';
+import { api, UnauthorizedError, type Apartment, type Device, type Gang } from './api';
 
 /**
  * Стани оновлюються поллінгом раз на 15 с. Сервер віддає їх із кешу,
@@ -20,6 +20,7 @@ interface AppState {
   refresh: () => Promise<void>;
   setApartment: (id: number | null) => void;
   sendCommand: (deviceId: string, code: string, value: unknown) => Promise<void>;
+  toggleGang: (deviceId: string, gang: Gang) => Promise<void>;
   addApartment: (name: string) => Promise<void>;
   removeApartment: (id: number) => Promise<void>;
   setMain: (id: number) => Promise<void>;
@@ -99,8 +100,29 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async sendCommand(deviceId, code, value) {
-    // Оптимістичне оновлення: Tuya відповідає 0.5–2 с, і без цього
-    // перемикач у UI виглядав би зламаним.
+    try {
+      await api.command(deviceId, code, value);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      await get().refresh();
+      return;
+    }
+
+    // Сервер уже дочекався застосування й перечитав стан перед відповіддю,
+    // тому тут достатньо короткої паузи.
+    setTimeout(() => void get().refresh(), 400);
+  },
+
+  /**
+   * Перемикання живлення винесене окремо, бо тут потрібні дві різні речі:
+   * булеве значення для UI і вендорське — для запиту. Раніше вони були
+   * одним значенням, і для Remihome в запит ішло "true" замість "on".
+   */
+  async toggleGang(deviceId, gang) {
+    const next = !gang.on;
+
+    // Оптимістичне оновлення: хмара відповідає 0.5–2 с, без цього
+    // перемикач виглядав би зламаним.
     set((s) => ({
       devices: s.devices.map((d) =>
         d.id === deviceId && d.state
@@ -109,7 +131,7 @@ export const useStore = create<AppState>((set, get) => ({
               state: {
                 ...d.state,
                 gangs: d.state.gangs.map((g) =>
-                  g.code === code ? { ...g, on: Boolean(value) } : g,
+                  g.code === gang.code ? { ...g, on: next } : g,
                 ),
               },
             }
@@ -117,17 +139,7 @@ export const useStore = create<AppState>((set, get) => ({
       ),
     }));
 
-    try {
-      await api.command(deviceId, code, value);
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
-      // Відкат до правди з сервера.
-      await get().refresh();
-      return;
-    }
-
-    // Даємо Tuya час застосувати команду, потім звіряємось.
-    setTimeout(() => void get().refresh(), 2000);
+    await get().sendCommand(deviceId, gang.code, next ? gang.onValue : gang.offValue);
   },
 
   async addApartment(name) {

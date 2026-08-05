@@ -14,11 +14,18 @@ export interface StateFlag {
   alarm: boolean;
 }
 
-/** Канал багатоклавішного вимикача. */
+/**
+ * Канал керування живленням.
+ *
+ * `onValue`/`offValue` — те, що очікує конкретний вендор: Tuya приймає
+ * булеве, Remihome — рядки "on"/"off".
+ */
 export interface Gang {
   code: string;
   label: string;
   on: boolean;
+  onValue: boolean | string;
+  offValue: boolean | string;
 }
 
 /** Керування з переліком варіантів — швидкість фанкойла, режим термостата. */

@@ -9,7 +9,7 @@ import { useStore } from '../store';
  * незалежні перемикачі — в акаунті таких п'ять.
  */
 export function SwitchCard({ device }: { device: Device }) {
-  const sendCommand = useStore((s) => s.sendCommand);
+  const toggleGang = useStore((s) => s.toggleGang);
   const [busyCode, setBusyCode] = useState<string | null>(null);
   const state = device.state;
   const gangs = state?.gangs ?? [];
@@ -19,10 +19,10 @@ export function SwitchCard({ device }: { device: Device }) {
   const powerMetric = state?.metrics.find((m) => m.key === 'power');
   const energyMetric = state?.metrics.find((m) => m.key === 'energy');
 
-  async function toggle(code: string, on: boolean) {
-    setBusyCode(code);
+  async function toggle(gang: (typeof gangs)[number]) {
+    setBusyCode(gang.code);
     try {
-      await sendCommand(device.id, code, !on);
+      await toggleGang(device.id, gang);
     } finally {
       setBusyCode(null);
     }
@@ -43,7 +43,7 @@ export function SwitchCard({ device }: { device: Device }) {
             aria-pressed={gang.on}
             aria-label={`${device.name}, ${gang.label}: ${gang.on ? 'вимкнути' : 'увімкнути'}`}
             disabled={busyCode === gang.code || !state?.online}
-            onClick={() => void toggle(gang.code, gang.on)}
+            onClick={() => void toggle(gang)}
           />
         </div>
       ))}

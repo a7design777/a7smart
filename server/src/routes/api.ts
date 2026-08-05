@@ -11,6 +11,7 @@ import {
   getCachedState,
   syncDevices,
   getProvider,
+  refreshDevice,
   health,
 } from '../poller.js';
 import {
@@ -165,7 +166,17 @@ api.post('/devices/:id/command', async (c) => {
     } else {
       await sendCommands(id, [parsed.data]);
     }
-    return c.json({ ok: true });
+
+    // Перечитуємо стан одразу: дашборд читає з кешу, який інакше
+    // оновиться лише за кілька хвилин, і команда виглядала б як
+    // «перемкнулось і відкотилось назад».
+    // Пауза — щоб прилад устиг застосувати команду.
+    await new Promise((r) => setTimeout(r, 900));
+    await refreshDevice(id).catch((err) => {
+      console.warn('[command] не вдалося перечитати стан:', err);
+    });
+
+    return c.json({ ok: true, state: getCachedState(id) });
   } catch (err) {
     if (err instanceof TuyaApiError) {
       return c.json({ error: 'tuya_error', code: err.code, message: err.tuyaMessage }, 502);

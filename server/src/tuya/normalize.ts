@@ -30,11 +30,19 @@ export interface StateFlag {
   alarm: boolean;
 }
 
-/** Один канал багатоклавішного вимикача. */
+/**
+ * Один канал керування живленням.
+ *
+ * `onValue`/`offValue` потрібні тому, що вендори очікують різне: Tuya
+ * приймає булеве `true`/`false`, Remihome — рядки `"on"`/`"off"`.
+ * Без цього UI надсилав би `"true"`, і прилад мовчки ігнорував би команду.
+ */
 export interface Gang {
   code: string;
   label: string;
   on: boolean;
+  onValue: boolean | string;
+  offValue: boolean | string;
 }
 
 /**
@@ -191,6 +199,8 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
         code: item.code,
         label: GANG_LABELS[item.code] ?? item.code,
         on: item.value,
+        onValue: true,
+        offValue: false,
       });
       continue;
     }
