@@ -57,10 +57,22 @@ export async function getDevicesStatus(
   deviceIds: string[],
 ): Promise<Map<string, TuyaStatusItem[]>> {
   const result = new Map<string, TuyaStatusItem[]>();
-  if (deviceIds.length === 0) return result;
 
-  for (let i = 0; i < deviceIds.length; i += BATCH_SIZE) {
-    const chunk = deviceIds.slice(i, i + BATCH_SIZE);
+  // Порожні id — ознака розсинхрону коду зі схемою БД (наприклад, старий
+  // образ читає перейменовану колонку). Tuya на такий список відповідає
+  // 1106 permission deny, і причина виглядає як проблема з доступом,
+  // хоча насправді це неузгоджений деплой.
+  const valid = deviceIds.filter((id) => typeof id === 'string' && id.length > 0);
+  if (valid.length !== deviceIds.length) {
+    throw new Error(
+      `Порожні ідентифікатори пристроїв (${deviceIds.length - valid.length} з ${deviceIds.length}). ` +
+        'Найімовірніше, версія образу не відповідає схемі БД — оновіть контейнер.',
+    );
+  }
+  if (valid.length === 0) return result;
+
+  for (let i = 0; i < valid.length; i += BATCH_SIZE) {
+    const chunk = valid.slice(i, i + BATCH_SIZE);
     const batch = await tuyaRequest<BatchStatusEntry[]>({
       path: '/v1.0/iot-03/devices/status',
       method: 'GET',
