@@ -150,7 +150,58 @@ export const api = {
     }),
 
   energy: (days: number) => request<EnergyBucket[]>(`/energy?days=${days}`),
+
+  reorderDevices: (ids: string[]) =>
+    request<{ ok: true }>('/devices/order', {
+      method: 'PATCH',
+      body: JSON.stringify({ ids }),
+    }),
+
+  scenes: () => request<Scene[]>('/scenes'),
+
+  createScene: (scene: SceneInput) =>
+    request<{ id: number }>('/scenes', { method: 'POST', body: JSON.stringify(scene) }),
+
+  updateScene: (id: number, scene: SceneInput) =>
+    request<{ ok: true }>(`/scenes/${id}`, { method: 'PUT', body: JSON.stringify(scene) }),
+
+  deleteScene: (id: number) => request<{ ok: true }>(`/scenes/${id}`, { method: 'DELETE' }),
+
+  runScene: (id: number) =>
+    request<{ ok: boolean; results: SceneRunResult[] }>(`/scenes/${id}/run`, {
+      method: 'POST',
+    }),
 };
+
+export interface SceneAction {
+  device_id: string;
+  code: string;
+  value: string;
+  /** Потрібен, щоб відновити форму значення: Tuya приймає булеве, Remihome — рядки. */
+  value_type: 'string' | 'boolean' | 'number';
+}
+
+export interface Scene {
+  id: number;
+  name: string;
+  apartment_id: number | null;
+  icon: string | null;
+  sort_order: number;
+  actions: SceneAction[];
+}
+
+export interface SceneInput {
+  name: string;
+  apartmentId: number | null;
+  actions: SceneAction[];
+}
+
+export interface SceneRunResult {
+  deviceId: string;
+  code: string;
+  ok: boolean;
+  error?: string;
+}
 
 export interface EnergyBucket {
   apartment_id: number | null;

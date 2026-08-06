@@ -93,6 +93,20 @@ export async function renameDevice(tuyaId: string, name: string): Promise<void> 
   await sql`UPDATE devices SET name = ${name} WHERE external_id = ${tuyaId}`;
 }
 
+/**
+ * Порядок пристроїв на дашборді. Приймається повний список у потрібній
+ * послідовності — так простіше й надійніше, ніж передавати зсуви:
+ * при 54 пристроях різниця в обсязі неістотна.
+ */
+export async function setDeviceOrder(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await sql.begin(async (tx) => {
+    for (const [index, id] of ids.entries()) {
+      await tx`UPDATE devices SET sort_order = ${index} WHERE external_id = ${id}`;
+    }
+  });
+}
+
 export function listEnabledDevices(): Promise<DeviceRow[]> {
   return sql<DeviceRow[]>`
     SELECT external_id, provider, apartment_id, name, category, kind,
@@ -236,6 +250,106 @@ export function getEnergyByApartment(opts: {
     GROUP BY apartment_id, bucket
     ORDER BY bucket
   `;
+}
+
+// ── Сценарії ────────────────────────────────────────────────────────────────
+
+export interface SceneAction {
+  device_id: string;
+  code: string;
+  value: string;
+  value_type: 'string' | 'boolean' | 'number';
+  position: number;
+}
+
+export interface SceneRow {
+  id: number;
+  name: string;
+  apartment_id: number | null;
+  icon: string | null;
+  sort_order: number;
+  actions: SceneAction[];
+}
+
+/**
+ * Сценарії разом із діями. Агрегація в SQL, а не окремим запитом на
+ * кожен сценарій: їх одиниці, але N+1 запитів до Neon через інтернет
+ * коштували б помітно дорожче за один JOIN.
+ */
+export function listScenes(): Promise<SceneRow[]> {
+  return sql<SceneRow[]>`
+    SELECT
+      s.id, s.name, s.apartment_id, s.icon, s.sort_order,
+      COALESCE(
+        json_agg(
+          json_build_object(
+            'device_id', a.device_id,
+            'code', a.code,
+            'value', a.value,
+            'value_type', a.value_type,
+            'position', a.position
+          ) ORDER BY a.position
+        ) FILTER (WHERE a.id IS NOT NULL),
+        '[]'
+      ) AS actions
+    FROM scenes s
+    LEFT JOIN scene_actions a ON a.scene_id = s.id
+    GROUP BY s.id
+    ORDER BY s.sort_order, s.name
+  `;
+}
+
+export async function createScene(opts: {
+  name: string;
+  apartmentId: number | null;
+  actions: Array<Omit<SceneAction, 'position'>>;
+}): Promise<number> {
+  return sql.begin(async (tx) => {
+    const rows = await tx<{ id: number }[]>`
+      INSERT INTO scenes (name, apartment_id, sort_order)
+      VALUES (
+        ${opts.name},
+        ${opts.apartmentId},
+        (SELECT coalesce(max(sort_order), 0) + 1 FROM scenes)
+      )
+      RETURNING id
+    `;
+    const id = rows[0]!.id;
+
+    for (const [position, action] of opts.actions.entries()) {
+      await tx`
+        INSERT INTO scene_actions (scene_id, device_id, code, value, value_type, position)
+        VALUES (${id}, ${action.device_id}, ${action.code},
+                ${action.value}, ${action.value_type}, ${position})
+      `;
+    }
+    return id;
+  });
+}
+
+/** Дії замінюються цілком: часткове редагування тут не потрібне. */
+export async function updateScene(
+  id: number,
+  opts: { name: string; apartmentId: number | null; actions: Array<Omit<SceneAction, 'position'>> },
+): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx`
+      UPDATE scenes SET name = ${opts.name}, apartment_id = ${opts.apartmentId}
+      WHERE id = ${id}
+    `;
+    await tx`DELETE FROM scene_actions WHERE scene_id = ${id}`;
+    for (const [position, action] of opts.actions.entries()) {
+      await tx`
+        INSERT INTO scene_actions (scene_id, device_id, code, value, value_type, position)
+        VALUES (${id}, ${action.device_id}, ${action.code},
+                ${action.value}, ${action.value_type}, ${position})
+      `;
+    }
+  });
+}
+
+export async function deleteScene(id: number): Promise<void> {
+  await sql`DELETE FROM scenes WHERE id = ${id}`;
 }
 
 /** Прибирання старих сирих точок. Викликається поллером раз на добу. */

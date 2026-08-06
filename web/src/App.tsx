@@ -6,6 +6,7 @@ import { SwitchCard } from './components/SwitchCard';
 import { SensorCard } from './components/SensorCard';
 import { ClimateCard } from './components/ClimateCard';
 import { ManageApartments } from './components/ManageApartments';
+import { EditGrid } from './components/EditGrid';
 import type { Device } from './api';
 
 /**
@@ -22,11 +23,15 @@ const HistoryChart = lazy(() =>
 const EnergyView = lazy(() =>
   import('./components/EnergyView').then((m) => ({ default: m.EnergyView })),
 );
+const ScenesView = lazy(() =>
+  import('./components/ScenesView').then((m) => ({ default: m.ScenesView })),
+);
 
-type View = 'home' | 'energy' | 'history' | 'manage';
+type View = 'home' | 'scenes' | 'energy' | 'history' | 'manage';
 
 const VIEW_LABEL: Record<View, string> = {
   home: 'Пристрої',
+  scenes: 'Сценарії',
   energy: 'Енергія',
   history: 'Історія',
   manage: 'Квартири',
@@ -38,6 +43,7 @@ export function App() {
   const setApartment = useStore((s) => s.setApartment);
   const logout = useStore((s) => s.logout);
   const [view, setView] = useState<View>('home');
+  const [editMode, setEditMode] = useState(false);
   const { theme, cycle } = useTheme();
 
   useEffect(() => {
@@ -81,6 +87,17 @@ export function App() {
       <header className="topbar">
         <h1>a7smart</h1>
         <div className="topbar__actions">
+          {view === 'home' && (
+            <button
+              type="button"
+              className={`ghost-btn icon-btn${editMode ? ' ghost-btn--active' : ''}`}
+              onClick={() => setEditMode((v) => !v)}
+              title={editMode ? 'Завершити редагування' : 'Порядок і назви'}
+              aria-label={editMode ? 'Завершити редагування' : 'Порядок і назви'}
+            >
+              {editMode ? '✓' : '⠿'}
+            </button>
+          )}
           <button
             type="button"
             className="ghost-btn icon-btn"
@@ -147,6 +164,12 @@ export function App() {
 
       {view === 'manage' && <ManageApartments />}
 
+      {view === 'scenes' && (
+        <Suspense fallback={<div className="empty">Завантаження…</div>}>
+          <ScenesView devices={devices} />
+        </Suspense>
+      )}
+
       {view === 'energy' && (
         <Suspense fallback={<div className="empty">Завантаження…</div>}>
           <EnergyView apartments={apartments} activeApartmentId={activeApartmentId} />
@@ -173,7 +196,17 @@ export function App() {
         </Suspense>
       )}
 
+      {view === 'home' && editMode && (
+        <>
+          <p className="card__sub" style={{ marginBottom: 12 }}>
+            Тягніть за ⠿, щоб змінити порядок. Торкніться назви, щоб перейменувати.
+          </p>
+          <EditGrid devices={visible} />
+        </>
+      )}
+
       {view === 'home' &&
+        !editMode &&
         (devices.length === 0 ? (
           <div className="empty">
             Пристроїв немає. Перевірте прив'язку акаунта Smart Life у Tuya IoT Platform.

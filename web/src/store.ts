@@ -1,5 +1,13 @@
 import { create } from 'zustand';
-import { api, UnauthorizedError, type Apartment, type Device, type Gang } from './api';
+import {
+  api,
+  UnauthorizedError,
+  type Apartment,
+  type Device,
+  type Gang,
+  type Scene,
+  type SceneInput,
+} from './api';
 
 /**
  * Стани оновлюються поллінгом раз на 15 с. Сервер віддає їх із кешу,
@@ -25,6 +33,15 @@ interface AppState {
   removeApartment: (id: number) => Promise<void>;
   setMain: (id: number) => Promise<void>;
   assign: (deviceId: string, apartmentId: number | null) => Promise<void>;
+  setOrder: (ids: string[]) => void;
+  commitOrder: () => Promise<void>;
+  rename: (deviceId: string, name: string) => Promise<void>;
+
+  scenes: Scene[];
+  loadScenes: () => Promise<void>;
+  saveScene: (id: number | null, scene: SceneInput) => Promise<void>;
+  removeScene: (id: number) => Promise<void>;
+  runScene: (id: number) => Promise<void>;
 }
 
 /** Вибір квартири робиться один раз за сесію — далі не перебиваємо користувача. */
@@ -183,5 +200,90 @@ export const useStore = create<AppState>((set, get) => ({
       set({ error: err instanceof Error ? err.message : String(err) });
       await get().refresh();
     }
+  },
+
+  /**
+   * Локальна перестановка під час перетягування — без запиту на сервер.
+   *
+   * Переставляються лише видимі пристрої, і саме в тих позиціях, які вони
+   * займали в повному списку. Інакше перетягування в одній квартирі
+   * перемішувало б порядок в усіх інших: `sort_order` спільний на всі
+   * пристрої, а не окремий для кожної квартири.
+   */
+  setOrder(ids) {
+    set((s) => {
+      const byId = new Map(s.devices.map((d) => [d.id, d]));
+      const moving = ids.map((id) => byId.get(id)).filter((d): d is Device => Boolean(d));
+      const slots = new Set(ids);
+
+      let next = 0;
+      const devices = s.devices.map((d) => (slots.has(d.id) ? moving[next++]! : d));
+      return { devices };
+    });
+  },
+
+  /** Зберігається повний порядок — щоб позиції інших квартир не зсувались. */
+  async commitOrder() {
+    try {
+      await api.reorderDevices(get().devices.map((d) => d.id));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      await get().refresh();
+    }
+  },
+
+  async rename(deviceId, name) {
+    set((s) => ({
+      devices: s.devices.map((d) => (d.id === deviceId ? { ...d, name } : d)),
+    }));
+    try {
+      await api.renameDevice(deviceId, name);
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      await get().refresh();
+    }
+  },
+
+  scenes: [],
+
+  async loadScenes() {
+    try {
+      set({ scenes: await api.scenes() });
+    } catch (err) {
+      if (!(err instanceof UnauthorizedError)) {
+        set({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  },
+
+  async saveScene(id, scene) {
+    if (id === null) {
+      await api.createScene(scene);
+    } else {
+      await api.updateScene(id, scene);
+    }
+    await get().loadScenes();
+  },
+
+  async removeScene(id) {
+    await api.deleteScene(id);
+    set((s) => ({ scenes: s.scenes.filter((x) => x.id !== id) }));
+  },
+
+  async runScene(id) {
+    try {
+      const res = await api.runScene(id);
+      if (!res.ok) {
+        const failed = res.results.filter((r) => !r.ok);
+        set({
+          error: `Сценарій виконано частково: не вдалося ${failed.length} з ${res.results.length} дій`,
+        });
+      } else {
+        set({ error: null });
+      }
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+    await get().refresh();
   },
 }));

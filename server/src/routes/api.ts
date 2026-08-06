@@ -6,6 +6,7 @@ import { sendCommands, allocateCameraStream, getStatusStrategy } from '../tuya/d
 import { TuyaApiError } from '../tuya/client.js';
 import { setRemihomeProperty } from '../remihome/devices.js';
 import { RemihomeError } from '../remihome/client.js';
+import { runScene } from '../scenes.js';
 import {
   getAllCachedStates,
   getCachedState,
@@ -25,6 +26,11 @@ import {
   renameDevice,
   getEnergyByApartment,
   setMainApartment,
+  setDeviceOrder,
+  listScenes,
+  createScene,
+  updateScene,
+  deleteScene,
 } from '../db/queries.js';
 
 export const api = new Hono();
@@ -258,6 +264,82 @@ api.get('/energy', async (c) => {
   const bucketHours = days <= 2 ? 1 : days <= 14 ? 6 : 24;
 
   return c.json(await getEnergyByApartment({ from, to, bucketHours }));
+});
+
+const orderSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500) });
+
+api.patch('/devices/order', async (c) => {
+  const parsed = orderSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+  await setDeviceOrder(parsed.data.ids);
+  return c.json({ ok: true });
+});
+
+// ── Сценарії ────────────────────────────────────────────────────────────────
+
+api.use('/scenes', requireAuth);
+api.use('/scenes/*', requireAuth);
+
+const sceneSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  apartmentId: z.number().int().nullable().default(null),
+  actions: z
+    .array(
+      z.object({
+        device_id: z.string().min(1),
+        code: z.string().min(1),
+        value: z.string(),
+        value_type: z.enum(['string', 'boolean', 'number']),
+      }),
+    )
+    .max(50),
+});
+
+api.get('/scenes', async (c) => c.json(await listScenes()));
+
+api.post('/scenes', async (c) => {
+  const parsed = sceneSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+  const id = await createScene({
+    name: parsed.data.name,
+    apartmentId: parsed.data.apartmentId,
+    actions: parsed.data.actions,
+  });
+  return c.json({ id }, 201);
+});
+
+api.put('/scenes/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const parsed = sceneSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success || !Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+  await updateScene(id, {
+    name: parsed.data.name,
+    apartmentId: parsed.data.apartmentId,
+    actions: parsed.data.actions,
+  });
+  return c.json({ ok: true });
+});
+
+api.delete('/scenes/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+  await deleteScene(id);
+  return c.json({ ok: true });
+});
+
+/**
+ * Запуск сценарію. Часткова відмова — не помилка запиту: відповідь
+ * перелічує, які дії пройшли, а які ні.
+ */
+api.post('/scenes/:id/run', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+
+  const scene = (await listScenes()).find((s) => s.id === id);
+  if (!scene) return c.json({ error: 'not_found' }, 404);
+
+  const results = await runScene(scene.actions);
+  return c.json({ ok: results.every((r) => r.ok), results });
 });
 
 api.post('/sync', async (c) => c.json({ count: await syncDevices() }));

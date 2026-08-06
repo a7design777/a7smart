@@ -640,6 +640,94 @@ input:focus-visible {
   opacity: 0.8;
 }
 
+/* ── Режим редагування: порядок і назви ─────────────────── */
+
+.edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.edit-row--dragging {
+  opacity: 0.4;
+  border-color: var(--accent);
+}
+
+/* Ручка — єдине місце, з якого починається перетягування. Інакше не
+   було б як поставити курсор у поле назви. */
+.edit-row__handle {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  border-radius: 8px;
+}
+
+.edit-row__handle:active {
+  cursor: grabbing;
+  background: var(--surface-hi);
+}
+
+.edit-row__icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.edit-row__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: inherit;
+  font: inherit;
+}
+
+.edit-row__input:hover {
+  border-color: var(--border);
+}
+
+.edit-row__input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface-hi);
+}
+
+/* Хрестик прибирання дії у сценарії */
+.chip__remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  flex: 0 0 auto;
+}
+
+.chip__remove:hover {
+  color: var(--danger);
+}
+
 /* ── Енергія ────────────────────────────────────────────── */
 
 .energy-total {
