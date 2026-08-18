@@ -58,6 +58,9 @@ web/      React + Vite, віддається тим самим контейне�
 Див. [DEPLOY.md](DEPLOY.md). Коротко: пуш у `main` → GitHub Actions збирає образ
 у GHCR → на сервері `docker compose pull && up -d`.
 
-## Контекст проєкту
+## Документація
 
-Технічні обмеження, пастки Tuya та правила роботи з кодом — у [CLAUDE.md](CLAUDE.md).
+- [ARCHITECTURE.md](ARCHITECTURE.md) — потік даних, провайдери, обґрунтування рішень, пастки
+- [STATE.md](STATE.md) — що вже працює, що налаштовано, що відкрито
+- [CLAUDE.md](CLAUDE.md) — правила роботи з кодом
+- [DEPLOY.md](DEPLOY.md) — розгортання з нуля
