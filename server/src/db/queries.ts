@@ -23,12 +23,34 @@ export interface ApartmentRow {
   is_main: boolean;
 }
 
-export function listApartments(): Promise<ApartmentRow[]> {
-  return sql<ApartmentRow[]>`
+/**
+ * Кеш квартир і пристроїв у пам'яті процесу.
+ *
+ * Фронтенд опитує /api/apartments і /api/devices раз на 15 с з кожної
+ * відкритої вкладки — без кешу це стільки самих SQL-запитів до Neon
+ * через інтернет, і постійний трафік не дає serverless-інстансу заснути.
+ * Дані тут змінюються рідко (перейменування, перетягування, синхронізація),
+ * тому кеш скидається явно при записі, а не за TTL.
+ */
+let apartmentsCache: ApartmentRow[] | null = null;
+let devicesCache: DeviceRow[] | null = null;
+
+function invalidateApartmentsCache(): void {
+  apartmentsCache = null;
+}
+
+function invalidateDevicesCache(): void {
+  devicesCache = null;
+}
+
+export async function listApartments(): Promise<ApartmentRow[]> {
+  if (apartmentsCache) return apartmentsCache;
+  apartmentsCache = await sql<ApartmentRow[]>`
     SELECT id, slug, name, sort_order, is_main
     FROM apartments
     ORDER BY is_main DESC, sort_order, name
   `;
+  return apartmentsCache;
 }
 
 /**
@@ -41,6 +63,7 @@ export async function setMainApartment(id: number): Promise<void> {
     await tx`UPDATE apartments SET is_main = FALSE WHERE is_main`;
     await tx`UPDATE apartments SET is_main = TRUE WHERE id = ${id}`;
   });
+  invalidateApartmentsCache();
 }
 
 export async function createApartment(name: string): Promise<ApartmentRow> {
@@ -64,11 +87,13 @@ export async function createApartment(name: string): Promise<ApartmentRow> {
     )
     RETURNING id, slug, name, sort_order, is_main
   `;
+  invalidateApartmentsCache();
   return rows[0]!;
 }
 
 export async function renameApartment(id: number, name: string): Promise<void> {
   await sql`UPDATE apartments SET name = ${name} WHERE id = ${id}`;
+  invalidateApartmentsCache();
 }
 
 /**
@@ -77,6 +102,9 @@ export async function renameApartment(id: number, name: string): Promise<void> {
  */
 export async function deleteApartment(id: number): Promise<void> {
   await sql`DELETE FROM apartments WHERE id = ${id}`;
+  invalidateApartmentsCache();
+  // ON DELETE SET NULL повертає пристрої в «Без квартири».
+  invalidateDevicesCache();
 }
 
 /** Прив'язати пристрій до квартири. null — прибрати прив'язку. */
@@ -87,10 +115,12 @@ export async function assignDevice(
   await sql`
     UPDATE devices SET apartment_id = ${apartmentId} WHERE external_id = ${tuyaId}
   `;
+  invalidateDevicesCache();
 }
 
 export async function renameDevice(tuyaId: string, name: string): Promise<void> {
   await sql`UPDATE devices SET name = ${name} WHERE external_id = ${tuyaId}`;
+  invalidateDevicesCache();
 }
 
 /**
@@ -105,16 +135,19 @@ export async function setDeviceOrder(ids: string[]): Promise<void> {
       await tx`UPDATE devices SET sort_order = ${index} WHERE external_id = ${id}`;
     }
   });
+  invalidateDevicesCache();
 }
 
-export function listEnabledDevices(): Promise<DeviceRow[]> {
-  return sql<DeviceRow[]>`
+export async function listEnabledDevices(): Promise<DeviceRow[]> {
+  if (devicesCache) return devicesCache;
+  devicesCache = await sql<DeviceRow[]>`
     SELECT external_id, provider, apartment_id, name, category, kind,
            enabled, sort_order, source_zone
     FROM devices
     WHERE enabled
     ORDER BY sort_order, name
   `;
+  return devicesCache;
 }
 
 /**
@@ -135,19 +168,31 @@ export async function upsertDevices(
 ): Promise<void> {
   if (devices.length === 0) return;
 
-  for (const d of devices) {
-    await sql`
-      INSERT INTO devices (external_id, provider, name, category, kind, source_zone, synced_at)
-      VALUES (${d.id}, ${d.provider}, ${d.name}, ${d.category}, ${d.kind},
-              ${d.sourceZone ?? null}, now())
-      ON CONFLICT (external_id) DO UPDATE
-        SET provider    = EXCLUDED.provider,
-            category    = EXCLUDED.category,
-            kind        = EXCLUDED.kind,
-            source_zone = EXCLUDED.source_zone,
-            synced_at   = now()
-    `;
-  }
+  await sql`
+    INSERT INTO devices ${sql(
+      devices.map((d) => ({
+        external_id: d.id,
+        provider: d.provider,
+        name: d.name,
+        category: d.category,
+        kind: d.kind,
+        source_zone: d.sourceZone ?? null,
+      })),
+      'external_id',
+      'provider',
+      'name',
+      'category',
+      'kind',
+      'source_zone',
+    )}
+    ON CONFLICT (external_id) DO UPDATE
+      SET provider    = EXCLUDED.provider,
+          category    = EXCLUDED.category,
+          kind        = EXCLUDED.kind,
+          source_zone = EXCLUDED.source_zone,
+          synced_at   = now()
+  `;
+  invalidateDevicesCache();
 }
 
 export async function insertReadings(
