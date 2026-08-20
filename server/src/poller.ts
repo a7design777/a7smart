@@ -7,7 +7,6 @@ import {
   listRemihomeDevices,
   getAllRemihomeStatuses,
   getZoneByDevice,
-  getRemihomeDeviceStatus,
 } from './remihome/devices.js';
 import { normalizeRemihome } from './remihome/normalize.js';
 import {
@@ -67,7 +66,11 @@ export async function refreshDevice(deviceId: string): Promise<void> {
   if (provider === 'remihome') {
     const device = remihomeCatalog.find((d) => d.code === deviceId);
     if (!device) return;
-    const props = await getRemihomeDeviceStatus(deviceId);
+    // Поштучний /devices/{code}/status віддає 404 (див. коментар у
+    // getAllRemihomeStatuses) — тому статус одного пристрою читається
+    // тим самим гуртовим шляхом, що й поллер, просто з одним кодом.
+    const props = (await getAllRemihomeStatuses([deviceId])).get(deviceId);
+    if (!props) return;
     const cached = stateCache.get(deviceId);
     stateCache.set(
       deviceId,
