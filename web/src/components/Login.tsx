@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useStore } from '../store';
+import { Icon } from './Icon';
 
 export function Login() {
   const login = useStore((s) => s.login);
@@ -24,7 +25,10 @@ export function Login() {
   return (
     <div className="login">
       <form onSubmit={(e) => void onSubmit(e)}>
-        <h1 style={{ fontSize: 20, margin: '0 0 4px' }}>a7smart</h1>
+        <div className="login__mark">
+          <Icon name="devices" size={26} />
+        </div>
+        <h1 className="login__title">a7smart</h1>
         <input
           type="password"
           value={password}
@@ -37,7 +41,7 @@ export function Login() {
         <button type="submit" className="primary-btn" disabled={busy || password.length === 0}>
           {busy ? 'Вхід…' : 'Увійти'}
         </button>
-        {error && <span style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</span>}
+        {error && <span className="form-error">{error}</span>}
       </form>
     </div>
   );

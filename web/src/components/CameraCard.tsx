@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { api, type Device } from '../api';
+import { Icon } from './Icon';
 
 /**
  * Живий перегляд камери.
@@ -86,7 +87,10 @@ export function CameraCard({ device }: { device: Device }) {
   return (
     <div className="card camera">
       <div className="row">
-        <span className="card__name" title={device.name}>
+        <span className="card__icon">
+          <Icon name="camera" size={16} />
+        </span>
+        <span className="card__name" title={device.name} style={{ flex: 1 }}>
           {device.name}
         </span>
         <button type="button" className="ghost-btn" onClick={() => setActive((v) => !v)}>
@@ -113,7 +117,7 @@ export function CameraCard({ device }: { device: Device }) {
             onClick={() => void play()}
             aria-label="Відтворити"
           >
-            ▶
+            <Icon name="play" size={22} />
           </button>
         )}
       </div>

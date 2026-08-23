@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Device } from '../api';
 import { useStore } from '../store';
+import { Icon } from './Icon';
 
 /**
  * Клімат: живлення, поточна температура + керування цільовою.
@@ -39,7 +40,10 @@ export function ClimateCard({ device }: { device: Device }) {
   return (
     <div className={`card${state?.online ? '' : ' card--offline'}`}>
       <div className="row">
-        <span className="card__name" title={device.name}>
+        <span className="card__icon">
+          <Icon name="thermometer" size={16} />
+        </span>
+        <span className="card__name" title={device.name} style={{ flex: 1 }}>
           {device.name}
         </span>
         {powerGang && (

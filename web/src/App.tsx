@@ -7,6 +7,8 @@ import { SensorCard } from './components/SensorCard';
 import { ClimateCard } from './components/ClimateCard';
 import { ManageApartments } from './components/ManageApartments';
 import { EditGrid } from './components/EditGrid';
+import { Icon, type IconName } from './components/Icon';
+import { WhatsNew, useUnseenChangelog } from './components/WhatsNew';
 import type { Device } from './api';
 
 /**
@@ -37,6 +39,14 @@ const VIEW_LABEL: Record<View, string> = {
   manage: 'Квартири',
 };
 
+const VIEW_ICON: Record<View, IconName> = {
+  home: 'devices',
+  scenes: 'scenes',
+  energy: 'energy',
+  history: 'history',
+  manage: 'apartments',
+};
+
 export function App() {
   const { authed, loading, error, apartments, devices, activeApartmentId } = useStore();
   const refresh = useStore((s) => s.refresh);
@@ -44,7 +54,9 @@ export function App() {
   const logout = useStore((s) => s.logout);
   const [view, setView] = useState<View>('home');
   const [editMode, setEditMode] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const { theme, cycle } = useTheme();
+  const unseenChangelog = useUnseenChangelog();
 
   useEffect(() => {
     void refresh();
@@ -85,54 +97,51 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>a7smart</h1>
+        <span className="topbar__brand">a7smart</span>
         <div className="topbar__actions">
           {view === 'home' && (
             <button
               type="button"
-              className={`ghost-btn icon-btn${editMode ? ' ghost-btn--active' : ''}`}
+              className={`icon-btn${editMode ? ' ghost-btn--active' : ''}`}
+              style={editMode ? { borderRadius: 8, background: 'var(--accent)', color: 'var(--on-accent)' } : undefined}
               onClick={() => setEditMode((v) => !v)}
               title={editMode ? 'Завершити редагування' : 'Порядок і назви'}
               aria-label={editMode ? 'Завершити редагування' : 'Порядок і назви'}
             >
-              {editMode ? '✓' : '⠿'}
+              <Icon name={editMode ? 'check' : 'grip'} size={19} />
             </button>
           )}
           <button
             type="button"
-            className="ghost-btn icon-btn"
+            className={`icon-btn${unseenChangelog ? ' icon-btn--dot' : ''}`}
+            onClick={() => setWhatsNewOpen(true)}
+            title="Що нового"
+            aria-label="Що нового"
+          >
+            <Icon name="info" size={19} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
             onClick={cycle}
             title={THEME_LABEL[theme]}
             aria-label={THEME_LABEL[theme]}
           >
-            {THEME_ICON[theme]}
+            <Icon name={THEME_ICON[theme]} size={19} />
           </button>
           <button
             type="button"
-            className="ghost-btn icon-btn"
+            className="icon-btn"
             onClick={() => void logout()}
             title="Вийти"
             aria-label="Вийти"
           >
-            ⏻
+            <Icon name="power" size={19} />
           </button>
         </div>
       </header>
 
-      <nav className="tabs" role="tablist" aria-label="Розділи">
-        {(Object.keys(VIEW_LABEL) as View[]).map((v) => (
-          <button
-            key={v}
-            type="button"
-            role="tab"
-            className="tab"
-            aria-selected={view === v}
-            onClick={() => setView(v)}
-          >
-            {VIEW_LABEL[v]}
-          </button>
-        ))}
-      </nav>
+      <h1 className="page-title">{VIEW_LABEL[view]}</h1>
 
       {error && <div className="banner">{error}</div>}
 
@@ -166,7 +175,7 @@ export function App() {
 
       {view === 'scenes' && (
         <Suspense fallback={<div className="empty">Завантаження…</div>}>
-          <ScenesView devices={devices} />
+          <ScenesView devices={visible} activeApartmentId={activeApartmentId} />
         </Suspense>
       )}
 
@@ -199,7 +208,7 @@ export function App() {
       {view === 'home' && editMode && (
         <>
           <p className="card__sub" style={{ marginBottom: 12 }}>
-            Тягніть за ⠿, щоб змінити порядок. Торкніться назви, щоб перейменувати.
+            Тягніть за ручку, щоб змінити порядок. Торкніться назви, щоб перейменувати.
           </p>
           <EditGrid devices={visible} />
         </>
@@ -264,6 +273,26 @@ export function App() {
             )}
           </>
         ))}
+
+      <nav className="tabbar" role="tablist" aria-label="Розділи">
+        {(Object.keys(VIEW_LABEL) as View[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            className="tabbar__item"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+          >
+            <span className="tabbar__icon">
+              <Icon name={VIEW_ICON[v]} size={22} strokeWidth={view === v ? 2 : 1.75} />
+            </span>
+            {VIEW_LABEL[v]}
+          </button>
+        ))}
+      </nav>
+
+      {whatsNewOpen && <WhatsNew onClose={() => setWhatsNewOpen(false)} />}
     </div>
   );
 }

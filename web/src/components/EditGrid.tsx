@@ -1,16 +1,8 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { useDragSort } from '../useDragSort';
+import { Icon, KIND_ICON } from './Icon';
 import type { Device } from '../api';
-
-const KIND_ICON: Record<Device['kind'], string> = {
-  switch: '⏻',
-  light: '☀',
-  climate: '🌡',
-  sensor: '◈',
-  camera: '▣',
-  unknown: '·',
-};
 
 /**
  * Режим редагування дашборда: порядок і назви.
@@ -84,9 +76,11 @@ function EditRow({
         aria-label={`Перетягнути ${device.name}`}
         title="Перетягнути"
       >
-        ⠿
+        <Icon name="grip" size={18} />
       </span>
-      <span className="edit-row__icon">{KIND_ICON[device.kind]}</span>
+      <span className="edit-row__icon">
+        <Icon name={KIND_ICON[device.kind]} size={17} />
+      </span>
       <input
         type="text"
         className="edit-row__input"

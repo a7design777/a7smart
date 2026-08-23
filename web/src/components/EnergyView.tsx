@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { api, type Apartment, type EnergyBucket } from '../api';
+import { api, type Apartment, type EnergyBucket, type TopConsumer } from '../api';
 
 const RANGES = [
   { label: 'Доба', days: 1 },
@@ -42,17 +42,18 @@ export function EnergyView({
 }) {
   const [days, setDays] = useState<number>(7);
   const [raw, setRaw] = useState<EnergyBucket[]>([]);
+  const [topConsumers, setTopConsumers] = useState<TopConsumer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api
-      .energy(days)
-      .then((data) => {
+    Promise.all([api.energy(days), api.energyTop(days, activeApartmentId)])
+      .then(([energy, top]) => {
         if (!cancelled) {
-          setRaw(data);
+          setRaw(energy);
+          setTopConsumers(top);
           setError(null);
         }
       })
@@ -65,7 +66,7 @@ export function EnergyView({
     return () => {
       cancelled = true;
     };
-  }, [days]);
+  }, [days, activeApartmentId]);
 
   /**
    * Дані вибраної квартири. Раніше вкладки квартир висіли над цим
@@ -233,6 +234,37 @@ export function EnergyView({
           </div>
           <span className="card__sub">Вісь Y — {unit}</span>
         </div>
+      )}
+
+      {topConsumers.length > 0 && (
+        <>
+          <h2 className="section-title">Найбільше споживають · {scopeName}</h2>
+          <div className="card">
+            <div className="rank-list">
+              {topConsumers.slice(0, 8).map((c, i) => {
+                const max = topConsumers[0]!.kwh;
+                const pct = max > 0 ? Math.max(4, (c.kwh / max) * 100) : 0;
+                return (
+                  <div className="rank-row" key={c.device_id}>
+                    <span className="rank-row__place">{i + 1}</span>
+                    <div className="rank-row__body">
+                      <span className="rank-row__name">{c.name}</span>
+                      <div className="rank-row__bar">
+                        <div
+                          className="rank-row__bar-fill"
+                          style={{ transform: `scaleX(${pct / 100})` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="rank-row__value">
+                      {(c.kwh * factor).toFixed(digits)} {unit}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
 
       <p className="card__sub" style={{ marginTop: 12 }}>

@@ -1,16 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useStore } from '../store';
 import { useDragAssign } from '../useDragAssign';
+import { Icon, KIND_ICON } from './Icon';
 import type { Device } from '../api';
-
-const KIND_ICON: Record<Device['kind'], string> = {
-  switch: '⏻',
-  light: '☀',
-  climate: '🌡',
-  sensor: '◈',
-  camera: '▣',
-  unknown: '·',
-};
 
 /** Зона «без квартири» має свій ідентифікатор, бо null у dataset не передаси. */
 const UNASSIGNED = 'none';
@@ -100,7 +92,9 @@ export function ManageApartments() {
                 className={`chip${drag?.id === d.id ? ' chip--dragging' : ''}`}
                 onPointerDown={(e) => onPointerDown(e, d.id, d.name)}
               >
-                <span className="chip__kind">{KIND_ICON[d.kind]}</span>
+                <span className="chip__kind">
+                  <Icon name={KIND_ICON[d.kind]} size={14} />
+                </span>
                 <span className="chip__label">{d.name}</span>
               </span>
             ))

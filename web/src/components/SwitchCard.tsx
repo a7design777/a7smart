@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Device } from '../api';
 import { useStore } from '../store';
+import { Icon, KIND_ICON } from './Icon';
 
 /**
  * Розетка, вимикач або лампа.
@@ -30,9 +31,14 @@ export function SwitchCard({ device }: { device: Device }) {
 
   return (
     <div className={`card${state?.online ? '' : ' card--offline'}`}>
-      <span className="card__name" title={device.name}>
-        {device.name}
-      </span>
+      <div className="row">
+        <span className="card__icon">
+          <Icon name={KIND_ICON[device.kind]} size={16} />
+        </span>
+        <span className="card__name" title={device.name} style={{ flex: 1 }}>
+          {device.name}
+        </span>
+      </div>
 
       {gangs.map((gang) => (
         <div className="row" key={gang.code}>

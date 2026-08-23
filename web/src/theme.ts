@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { IconName } from './components/Icon';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -43,10 +44,10 @@ export function useTheme() {
   return { theme, setTheme, cycle };
 }
 
-export const THEME_ICON: Record<Theme, string> = {
-  system: '◐',
-  light: '☀',
-  dark: '☾',
+export const THEME_ICON: Record<Theme, IconName> = {
+  system: 'circle-half',
+  light: 'sun',
+  dark: 'moon',
 };
 
 export const THEME_LABEL: Record<Theme, string> = {
