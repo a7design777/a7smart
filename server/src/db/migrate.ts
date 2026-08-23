@@ -13,12 +13,12 @@ import { sql } from './client.js';
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'migrations');
 
 async function main() {
-  await sql`
+  await sql.unsafe(`
     CREATE TABLE IF NOT EXISTS _migrations (
       name       TEXT PRIMARY KEY,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     )
-  `;
+  `);
 
   const applied = new Set(
     (await sql<{ name: string }[]>`SELECT name FROM _migrations`).map((r) => r.name),
@@ -32,10 +32,11 @@ async function main() {
       continue;
     }
     const content = await readFile(join(migrationsDir, file), 'utf8');
-    await sql.begin(async (tx) => {
-      await tx.unsafe(content);
-      await tx`INSERT INTO _migrations (name) VALUES (${file})`;
-    });
+    // D1 REST /query виконує весь текст (кілька `;`-розділених
+    // стейтментів) одним викликом — окремої транзакції тут немає,
+    // але для одноразового застосування схеми це не критично.
+    await sql.unsafe(content);
+    await sql`INSERT INTO _migrations (name) VALUES (${file})`;
     console.log(`  застосовано ${file}`);
   }
 
@@ -45,6 +46,6 @@ async function main() {
 
 main().catch(async (err) => {
   console.error(err);
-  await sql.end({ timeout: 5 });
+  await sql.end();
   process.exit(1);
 });

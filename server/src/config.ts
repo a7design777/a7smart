@@ -15,7 +15,11 @@ const schema = z.object({
   // UID акаунта Smart Life: Cloud Project → Devices → Link App Account
   TUYA_UID: z.string().min(1, 'TUYA_UID порожній'),
 
-  DATABASE_URL: z.string().url(),
+  // Cloudflare D1 — REST API поза Workers: акаунт, ідентифікатор бази
+  // та токен із правом D1 Edit (My Profile → API Tokens).
+  CF_ACCOUNT_ID: z.string().min(1, 'CF_ACCOUNT_ID порожній'),
+  CF_D1_DATABASE_ID: z.string().min(1, 'CF_D1_DATABASE_ID порожній'),
+  CF_D1_API_TOKEN: z.string().min(1, 'CF_D1_API_TOKEN порожній'),
 
   // Remihome (Remica) — необов'язковий провайдер. Якщо не заповнений,
   // просто не вмикається; Tuya від цього не залежить.

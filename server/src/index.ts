@@ -32,15 +32,12 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
 
 startPoller();
 
-/**
- * Коректне завершення: Traefik має встигнути зняти контейнер з балансування,
- * а поллер — не залишити висіти з'єднання до Neon.
- */
+/** Коректне завершення: Traefik має встигнути зняти контейнер з балансування. */
 async function shutdown(signal: string) {
   console.log(`${signal} — завершення роботи`);
   stopPoller();
   server.close();
-  await sql.end({ timeout: 5 }).catch(() => undefined);
+  await sql.end().catch(() => undefined);
   process.exit(0);
 }
 
