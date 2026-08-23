@@ -2,7 +2,10 @@
 
 Сервер `159.223.224.106` (Ubuntu 22.04, 1 vCPU, 1 GB RAM) — той самий, що й у a7cms.
 Уже працюють **Traefik + n8n + flowise + a7cms**. Додаємо a7smart окремим стеком,
-сусідів не чіпаємо. Postgres — зовнішній (Neon).
+сусідів не чіпаємо. БД — зовнішня, **Cloudflare D1** (REST API, без постійного
+з'єднання): білиться за кількість читань/записів, а не за активний час, тому
+фоновий поллер не спалює квоту самим фактом, що живий (на відміну від Neon,
+чий безкоштовний тариф свого часу впав саме через це).
 
 **Образ збирається в GitHub Actions**, на сервері лише `docker pull`. Локальний
 `docker build` на 1 vCPU поруч із рештою контейнерів надто дорогий.
@@ -23,10 +26,21 @@
 > *Cloud → My Services*. Коли він спливе, дашборд перестане отримувати дані.
 > Це найчастіша причина «раптової поломки» — див. `/api/health`.
 
-## Крок 2. Neon
+## Крок 2. Cloudflare D1
 
-1. Створити проєкт на [neon.tech](https://neon.tech), БД `a7smart`.
-2. Скопіювати connection string з `?sslmode=require`.
+1. `npx wrangler login` (одноразово, відкриє браузер для OAuth).
+2. `npx wrangler d1 create a7smart` — виведе `database_id`.
+3. `Account ID` — `npx wrangler whoami`.
+4. API-токен для REST-доступу (сервер ходить у D1 не через Workers-біндинг,
+   а звичайним HTTPS): [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+   → *Create Token* → *Create Custom Token* → право `Account → D1 → Edit`
+   на потрібний акаунт. Токен показується один раз — зберегти одразу.
+
+> D1 REST API не гарантує атомарність багатостейтментних запитів
+> (транзакції — лише через Workers-біндинг `env.DB.batch()`, якого тут
+> немає). `sql.begin(...)` у коді виконує кілька запитів послідовно, без
+> відкату — свідомий компроміс для персонального дашборда, див.
+> ARCHITECTURE.md.
 
 ## Крок 3. Локальна підготовка
 
@@ -65,7 +79,8 @@ npm run tuya:probe
 
 ## Крок 5. Квартири та прив'язка пристроїв
 
-Заповнити таблиці в Neon (SQL Editor):
+Заповнити таблиці в D1 (`wrangler d1 execute a7smart --remote --command "..."`,
+або через dash.cloudflare.com → Workers & Pages → D1 → a7smart → Console):
 
 ```sql
 INSERT INTO apartments (slug, name, sort_order) VALUES
@@ -76,8 +91,11 @@ INSERT INTO apartments (slug, name, sort_order) VALUES
 Після першого запуску сервера (він синхронізує каталог) прив'язати пристрої:
 
 ```sql
-UPDATE devices SET apartment_id = 1 WHERE tuya_id IN ('bf1234…', 'bf5678…');
+UPDATE devices SET apartment_id = 1 WHERE external_id IN ('bf1234…', 'bf5678…');
 ```
+
+Простіше — через саму UI дашборда (створення квартири й перетягування
+пристроїв), SQL тут потрібен лише для масового першого розподілу.
 
 ## Крок 6. GitHub
 

@@ -1,4 +1,4 @@
-import { sql } from './client.js';
+import { sql, insertValues } from './client.js';
 import type { DeviceKind } from '../tuya/normalize.js';
 
 export type Provider = 'tuya' | 'remihome';
@@ -23,14 +23,17 @@ export interface ApartmentRow {
   is_main: boolean;
 }
 
+/** Рядок, як його реально повертає D1: BOOLEAN зберігається як INTEGER 0/1. */
+type RawDeviceRow = Omit<DeviceRow, 'enabled'> & { enabled: number };
+type RawApartmentRow = Omit<ApartmentRow, 'is_main'> & { is_main: number };
+
 /**
  * Кеш квартир і пристроїв у пам'яті процесу.
  *
  * Фронтенд опитує /api/apartments і /api/devices раз на 15 с з кожної
- * відкритої вкладки — без кешу це стільки самих SQL-запитів до Neon
- * через інтернет, і постійний трафік не дає serverless-інстансу заснути.
- * Дані тут змінюються рідко (перейменування, перетягування, синхронізація),
- * тому кеш скидається явно при записі, а не за TTL.
+ * відкритої вкладки. Дані тут змінюються рідко (перейменування,
+ * перетягування, синхронізація), тому кеш скидається явно при записі,
+ * а не за TTL.
  */
 let apartmentsCache: ApartmentRow[] | null = null;
 let devicesCache: DeviceRow[] | null = null;
@@ -45,23 +48,29 @@ function invalidateDevicesCache(): void {
 
 export async function listApartments(): Promise<ApartmentRow[]> {
   if (apartmentsCache) return apartmentsCache;
-  apartmentsCache = await sql<ApartmentRow[]>`
+  const rows = await sql<RawApartmentRow[]>`
     SELECT id, slug, name, sort_order, is_main
     FROM apartments
     ORDER BY is_main DESC, sort_order, name
   `;
+  apartmentsCache = rows.map((r) => ({ ...r, is_main: Boolean(r.is_main) }));
   return apartmentsCache;
 }
 
 /**
- * Призначити головну квартиру. Знімається з попередньої в тій самій
- * транзакції: частковий унікальний індекс не дозволить двох головних,
- * і без цього другий UPDATE впав би.
+ * Призначити головну квартиру. Знімається з попередньої перед тим, як
+ * поставити на нову: частковий унікальний індекс не дозволить двох
+ * головних одночасно, і без цього другий UPDATE впав би.
+ *
+ * D1 REST API не дає справжніх транзакцій ззовні Workers (див.
+ * db/client.ts) — ці два UPDATE виконуються послідовно, без відкату.
+ * Для персонального дашборда прийнятно: найгірший наслідок збою між
+ * ними — тимчасово жодної головної квартири, не пошкоджені дані.
  */
 export async function setMainApartment(id: number): Promise<void> {
   await sql.begin(async (tx) => {
-    await tx`UPDATE apartments SET is_main = FALSE WHERE is_main`;
-    await tx`UPDATE apartments SET is_main = TRUE WHERE id = ${id}`;
+    await tx`UPDATE apartments SET is_main = 0 WHERE is_main`;
+    await tx`UPDATE apartments SET is_main = 1 WHERE id = ${id}`;
   });
   invalidateApartmentsCache();
 }
@@ -75,10 +84,10 @@ export async function createApartment(name: string): Promise<ApartmentRow> {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'apt';
 
-  const rows = await sql<ApartmentRow[]>`
+  const rows = await sql<RawApartmentRow[]>`
     INSERT INTO apartments (slug, name, sort_order, is_main)
     VALUES (
-      ${base} || '-' || (SELECT coalesce(max(id), 0) + 1 FROM apartments)::text,
+      ${base} || '-' || CAST((SELECT coalesce(max(id), 0) + 1 FROM apartments) AS TEXT),
       ${name},
       (SELECT coalesce(max(sort_order), 0) + 1 FROM apartments),
       -- Перша створена квартира одразу стає головною: інакше після
@@ -88,7 +97,8 @@ export async function createApartment(name: string): Promise<ApartmentRow> {
     RETURNING id, slug, name, sort_order, is_main
   `;
   invalidateApartmentsCache();
-  return rows[0]!;
+  const row = rows[0]!;
+  return { ...row, is_main: Boolean(row.is_main) };
 }
 
 export async function renameApartment(id: number, name: string): Promise<void> {
@@ -140,13 +150,14 @@ export async function setDeviceOrder(ids: string[]): Promise<void> {
 
 export async function listEnabledDevices(): Promise<DeviceRow[]> {
   if (devicesCache) return devicesCache;
-  devicesCache = await sql<DeviceRow[]>`
+  const rows = await sql<RawDeviceRow[]>`
     SELECT external_id, provider, apartment_id, name, category, kind,
            enabled, sort_order, source_zone
     FROM devices
     WHERE enabled
     ORDER BY sort_order, name
   `;
+  devicesCache = rows.map((r) => ({ ...r, enabled: Boolean(r.enabled) }));
   return devicesCache;
 }
 
@@ -168,30 +179,32 @@ export async function upsertDevices(
 ): Promise<void> {
   if (devices.length === 0) return;
 
-  await sql`
-    INSERT INTO devices ${sql(
-      devices.map((d) => ({
-        external_id: d.id,
-        provider: d.provider,
-        name: d.name,
-        category: d.category,
-        kind: d.kind,
-        source_zone: d.sourceZone ?? null,
-      })),
-      'external_id',
-      'provider',
-      'name',
-      'category',
-      'kind',
-      'source_zone',
-    )}
+  const columns = ['external_id', 'provider', 'name', 'category', 'kind', 'source_zone'];
+  const { placeholders, params } = insertValues(
+    devices.map((d) => ({
+      external_id: d.id,
+      provider: d.provider,
+      name: d.name,
+      category: d.category,
+      kind: d.kind,
+      source_zone: d.sourceZone ?? null,
+    })),
+    columns,
+  );
+
+  await sql.query(
+    `
+    INSERT INTO devices (${columns.join(', ')})
+    VALUES ${placeholders}
     ON CONFLICT (external_id) DO UPDATE
-      SET provider    = EXCLUDED.provider,
-          category    = EXCLUDED.category,
-          kind        = EXCLUDED.kind,
-          source_zone = EXCLUDED.source_zone,
-          synced_at   = now()
-  `;
+      SET provider    = excluded.provider,
+          category    = excluded.category,
+          kind        = excluded.kind,
+          source_zone = excluded.source_zone,
+          synced_at   = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    `,
+    params,
+  );
   invalidateDevicesCache();
 }
 
@@ -199,18 +212,18 @@ export async function insertReadings(
   rows: Array<{ deviceId: string; key: string; value: number }>,
 ): Promise<void> {
   if (rows.length === 0) return;
-  await sql`
-    INSERT INTO readings ${sql(
-      rows.map((r) => ({ device_id: r.deviceId, key: r.key, value: r.value })),
-      'device_id',
-      'key',
-      'value',
-    )}
-  `;
+
+  const columns = ['device_id', 'key', 'value'];
+  const { placeholders, params } = insertValues(
+    rows.map((r) => ({ device_id: r.deviceId, key: r.key, value: r.value })),
+    columns,
+  );
+
+  await sql.query(`INSERT INTO readings (${columns.join(', ')}) VALUES ${placeholders}`, params);
 }
 
 export interface HistoryPoint {
-  bucket: Date;
+  bucket: string;
   avg: number;
   min: number;
   max: number;
@@ -228,19 +241,21 @@ export function getHistory(opts: {
   to: Date;
   bucketMinutes: number;
 }): Promise<HistoryPoint[]> {
-  const interval = `${opts.bucketMinutes} minutes`;
+  const bucketSeconds = opts.bucketMinutes * 60;
   return sql<HistoryPoint[]>`
     SELECT
-      to_timestamp(floor(extract(epoch FROM ts) / extract(epoch FROM ${interval}::interval))
-        * extract(epoch FROM ${interval}::interval)) AS bucket,
+      strftime('%Y-%m-%dT%H:%M:%fZ',
+        (CAST(unixepoch(ts) / ${bucketSeconds} AS INTEGER)) * ${bucketSeconds},
+        'unixepoch'
+      ) AS bucket,
       avg(value) AS avg,
       min(value) AS min,
       max(value) AS max
     FROM readings
     WHERE device_id = ${opts.deviceId}
       AND key = ${opts.key}
-      AND ts >= ${opts.from}
-      AND ts <= ${opts.to}
+      AND ts >= ${opts.from.toISOString()}
+      AND ts <= ${opts.to.toISOString()}
     GROUP BY bucket
     ORDER BY bucket
   `;
@@ -248,7 +263,7 @@ export function getHistory(opts: {
 
 export interface EnergyBucket {
   apartment_id: number | null;
-  bucket: Date;
+  bucket: string;
   kwh: number;
 }
 
@@ -268,27 +283,29 @@ export function getEnergyByApartment(opts: {
   to: Date;
   bucketHours: number;
 }): Promise<EnergyBucket[]> {
-  const bucket = `${opts.bucketHours} hours`;
+  const bucketSeconds = opts.bucketHours * 3600;
   return sql<EnergyBucket[]>`
     WITH steps AS (
       SELECT
         d.apartment_id,
         r.ts,
         r.value AS watts,
-        LEAST(
-          EXTRACT(EPOCH FROM (r.ts - LAG(r.ts) OVER (PARTITION BY r.device_id ORDER BY r.ts))),
+        MIN(
+          unixepoch(r.ts) - unixepoch(LAG(r.ts) OVER (PARTITION BY r.device_id ORDER BY r.ts)),
           900
         ) AS seconds
       FROM readings r
       JOIN devices d ON d.external_id = r.device_id
       WHERE r.key = 'power'
-        AND r.ts >= ${opts.from}
-        AND r.ts <= ${opts.to}
+        AND r.ts >= ${opts.from.toISOString()}
+        AND r.ts <= ${opts.to.toISOString()}
     )
     SELECT
       apartment_id,
-      to_timestamp(floor(extract(epoch FROM ts) / extract(epoch FROM ${bucket}::interval))
-        * extract(epoch FROM ${bucket}::interval)) AS bucket,
+      strftime('%Y-%m-%dT%H:%M:%fZ',
+        (CAST(unixepoch(ts) / ${bucketSeconds} AS INTEGER)) * ${bucketSeconds},
+        'unixepoch'
+      ) AS bucket,
       COALESCE(sum(watts * seconds) / 3600.0 / 1000.0, 0) AS kwh
     FROM steps
     WHERE seconds IS NOT NULL
@@ -316,32 +333,44 @@ export interface SceneRow {
   actions: SceneAction[];
 }
 
+/** Рядок, як його реально повертає D1: `actions` — JSON-текст, не масив. */
+type RawSceneRow = Omit<SceneRow, 'actions'> & { actions: string };
+
 /**
  * Сценарії разом із діями. Агрегація в SQL, а не окремим запитом на
- * кожен сценарій: їх одиниці, але N+1 запитів до Neon через інтернет
- * коштували б помітно дорожче за один JOIN.
+ * кожен сценарій: їх одиниці, але N+1 запитів через мережу коштували б
+ * помітно дорожче за один запит із корельованим підзапитом.
+ *
+ * Впорядкований JSON збирається корельованим підзапитом (`ORDER BY
+ * position` усередині), а не через `json_group_array(...) ORDER BY` —
+ * SQLite, на відміну від Postgres, не приймає ORDER BY всередині
+ * агрегатної функції.
  */
-export function listScenes(): Promise<SceneRow[]> {
-  return sql<SceneRow[]>`
+export async function listScenes(): Promise<SceneRow[]> {
+  const rows = await sql<RawSceneRow[]>`
     SELECT
       s.id, s.name, s.apartment_id, s.icon, s.sort_order,
       COALESCE(
-        json_agg(
-          json_build_object(
-            'device_id', a.device_id,
-            'code', a.code,
-            'value', a.value,
-            'value_type', a.value_type,
-            'position', a.position
-          ) ORDER BY a.position
-        ) FILTER (WHERE a.id IS NOT NULL),
+        (
+          SELECT json_group_array(
+            json_object(
+              'device_id', a.device_id,
+              'code', a.code,
+              'value', a.value,
+              'value_type', a.value_type,
+              'position', a.position
+            )
+          )
+          FROM (
+            SELECT * FROM scene_actions WHERE scene_id = s.id ORDER BY position
+          ) a
+        ),
         '[]'
       ) AS actions
     FROM scenes s
-    LEFT JOIN scene_actions a ON a.scene_id = s.id
-    GROUP BY s.id
     ORDER BY s.sort_order, s.name
   `;
+  return rows.map((r) => ({ ...r, actions: JSON.parse(r.actions) as SceneAction[] }));
 }
 
 export async function createScene(opts: {
@@ -397,10 +426,17 @@ export async function deleteScene(id: number): Promise<void> {
   await sql`DELETE FROM scenes WHERE id = ${id}`;
 }
 
-/** Прибирання старих сирих точок. Викликається поллером раз на добу. */
+/**
+ * Прибирання старих сирих точок. Викликається поллером раз на добу.
+ *
+ * Межа рахується тим самим форматом (`T`…`Z`), що й `ts` у таблиці —
+ * SQLite порівнює часові рядки як текст, і мішанина `datetime('now')`
+ * (пробіл-роздільник) з `strftime(...'T'...)` дала б хибне порівняння
+ * в межах одного дня.
+ */
 export function pruneReadings(olderThanDays: number): Promise<unknown> {
   return sql`
     DELETE FROM readings
-    WHERE ts < now() - ${`${olderThanDays} days`}::interval
+    WHERE ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ${`-${olderThanDays} days`})
   `;
 }
