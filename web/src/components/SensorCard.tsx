@@ -1,4 +1,5 @@
 import type { Device } from '../api';
+import { Icon, KIND_ICON } from './Icon';
 
 const LABELS: Record<string, string> = {
   temperature: 'Температура',
@@ -28,9 +29,14 @@ export function SensorCard({ device }: { device: Device }) {
     <div
       className={`card${state?.online ? '' : ' card--offline'}${hasAlarm ? ' card--alarm' : ''}`}
     >
-      <span className="card__name" title={device.name}>
-        {device.name}
-      </span>
+      <div className="row">
+        <span className="card__icon">
+          <Icon name={KIND_ICON[device.kind]} size={16} />
+        </span>
+        <span className="card__name" title={device.name} style={{ flex: 1 }}>
+          {device.name}
+        </span>
+      </div>
 
       {alarms.map((s) => (
         <span key={s.code} className="alarm-flag">

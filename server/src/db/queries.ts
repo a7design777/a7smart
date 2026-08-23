@@ -314,6 +314,51 @@ export function getEnergyByApartment(opts: {
   `;
 }
 
+export interface TopConsumer {
+  device_id: string;
+  name: string;
+  kwh: number;
+}
+
+/**
+ * Рейтинг пристроїв за спожитою енергією за період — «що споживає
+ * найбільше». Той самий розрахунок інтегруванням потужності, що й
+ * getEnergyByApartment, але згрупований по пристрою, а не по бакетах
+ * часу, і фільтрований опційно по квартирі (null — усі).
+ */
+export function getTopConsumers(opts: {
+  apartmentId: number | null;
+  from: Date;
+  to: Date;
+}): Promise<TopConsumer[]> {
+  return sql<TopConsumer[]>`
+    WITH steps AS (
+      SELECT
+        r.device_id,
+        MIN(
+          unixepoch(r.ts) - unixepoch(LAG(r.ts) OVER (PARTITION BY r.device_id ORDER BY r.ts)),
+          900
+        ) AS seconds,
+        r.value AS watts
+      FROM readings r
+      WHERE r.key = 'power'
+        AND r.ts >= ${opts.from.toISOString()}
+        AND r.ts <= ${opts.to.toISOString()}
+    )
+    SELECT
+      d.external_id AS device_id,
+      d.name,
+      COALESCE(sum(steps.watts * steps.seconds) / 3600.0 / 1000.0, 0) AS kwh
+    FROM steps
+    JOIN devices d ON d.external_id = steps.device_id
+    WHERE steps.seconds IS NOT NULL
+      AND (${opts.apartmentId} IS NULL OR d.apartment_id = ${opts.apartmentId})
+    GROUP BY d.external_id, d.name
+    HAVING kwh > 0
+    ORDER BY kwh DESC
+  `;
+}
+
 // ── Сценарії ────────────────────────────────────────────────────────────────
 
 export interface SceneAction {

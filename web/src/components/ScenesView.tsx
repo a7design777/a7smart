@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store';
+import { Icon } from './Icon';
 import type { Device, Scene, SceneAction } from '../api';
 
 /**
@@ -8,9 +9,19 @@ import type { Device, Scene, SceneAction } from '../api';
  * Розкладів і тригерів тут немає — це ручні сценарії. Автоматизації за
  * часом чи подією потребують окремого рушія на сервері, і змішувати їх
  * сюди означало б закласти складність наперед.
+ *
+ * `devices` приходить від App уже відфільтрованим під активну квартиру
+ * (або повний список для «Усі») — тому редактор сценарію без додаткової
+ * логіки пропонує дії лише для пристроїв вибраної квартири.
  */
-export function ScenesView({ devices }: { devices: Device[] }) {
-  const scenes = useStore((s) => s.scenes);
+export function ScenesView({
+  devices,
+  activeApartmentId,
+}: {
+  devices: Device[];
+  activeApartmentId: number | null;
+}) {
+  const allScenes = useStore((s) => s.scenes);
   const loadScenes = useStore((s) => s.loadScenes);
   const runScene = useStore((s) => s.runScene);
   const removeScene = useStore((s) => s.removeScene);
@@ -20,6 +31,15 @@ export function ScenesView({ devices }: { devices: Device[] }) {
   useEffect(() => {
     void loadScenes();
   }, [loadScenes]);
+
+  /** У «Усі» — всі сценарії; у вибраній квартирі — лише її власні. */
+  const scenes = useMemo(
+    () =>
+      activeApartmentId === null
+        ? allScenes
+        : allScenes.filter((s) => s.apartment_id === activeApartmentId),
+    [allScenes, activeApartmentId],
+  );
 
   async function run(id: number) {
     setBusyId(id);
@@ -35,6 +55,7 @@ export function ScenesView({ devices }: { devices: Device[] }) {
       <SceneEditor
         scene={editing === 'new' ? null : editing}
         devices={devices}
+        apartmentId={activeApartmentId}
         onDone={() => setEditing(null)}
       />
     );
@@ -53,15 +74,21 @@ export function ScenesView({ devices }: { devices: Device[] }) {
 
       {scenes.length === 0 ? (
         <div className="empty">
-          Сценаріїв ще немає. Сценарій — це набір дій: наприклад, «Йду з дому» вимикає
-          світло й опалення одним натисканням.
+          {activeApartmentId === null
+            ? 'Сценаріїв ще немає. Сценарій — це набір дій: наприклад, «Йду з дому» вимикає світло й опалення одним натисканням.'
+            : 'У цій квартирі ще немає сценаріїв.'}
         </div>
       ) : (
         <div className="grid grid--wide">
           {scenes.map((scene) => (
             <div className="card" key={scene.id}>
               <div className="row">
-                <span className="card__name">{scene.name}</span>
+                <span className="card__icon">
+                  <Icon name="scenes" size={16} />
+                </span>
+                <span className="card__name" style={{ flex: 1 }}>
+                  {scene.name}
+                </span>
                 <span className="card__sub">{scene.actions.length} дій</span>
               </div>
               <div className="dropzone__actions" style={{ margin: 0 }}>
@@ -142,10 +169,12 @@ function availableActions(device: Device): Array<{ action: SceneAction; label: s
 function SceneEditor({
   scene,
   devices,
+  apartmentId,
   onDone,
 }: {
   scene: Scene | null;
   devices: Device[];
+  apartmentId: number | null;
   onDone: () => void;
 }) {
   const saveScene = useStore((s) => s.saveScene);
@@ -176,7 +205,7 @@ function SceneEditor({
     if (!trimmed) return;
     setBusy(true);
     try {
-      await saveScene(scene?.id ?? null, { name: trimmed, apartmentId: null, actions });
+      await saveScene(scene?.id ?? null, { name: trimmed, apartmentId, actions });
       onDone();
     } finally {
       setBusy(false);
@@ -217,7 +246,7 @@ function SceneEditor({
                 aria-label="Прибрати дію"
                 onClick={() => setActions((prev) => prev.filter((_, idx) => idx !== i))}
               >
-                ×
+                <Icon name="close" size={14} />
               </button>
             </span>
           ))}

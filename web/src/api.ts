@@ -151,6 +151,13 @@ export const api = {
 
   energy: (days: number) => request<EnergyBucket[]>(`/energy?days=${days}`),
 
+  energyTop: (days: number, apartmentId: number | null) =>
+    request<TopConsumer[]>(
+      `/energy/top?days=${days}${apartmentId !== null ? `&apartmentId=${apartmentId}` : ''}`,
+    ),
+
+  health: () => request<HealthInfo>('/health'),
+
   reorderDevices: (ids: string[]) =>
     request<{ ok: true }>('/devices/order', {
       method: 'PATCH',
@@ -207,4 +214,17 @@ export interface EnergyBucket {
   apartment_id: number | null;
   bucket: string;
   kwh: number;
+}
+
+export interface TopConsumer {
+  device_id: string;
+  name: string;
+  kwh: number;
+}
+
+export interface HealthInfo {
+  version: string;
+  ok: boolean;
+  lastPollAt: string | null;
+  lastError: string | null;
 }

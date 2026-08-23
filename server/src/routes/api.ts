@@ -25,6 +25,7 @@ import {
   assignDevice,
   renameDevice,
   getEnergyByApartment,
+  getTopConsumers,
   setMainApartment,
   setDeviceOrder,
   listScenes,
@@ -264,6 +265,23 @@ api.get('/energy', async (c) => {
   const bucketHours = days <= 2 ? 1 : days <= 14 ? 6 : 24;
 
   return c.json(await getEnergyByApartment({ from, to, bucketHours }));
+});
+
+const topConsumersSchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(7),
+  apartmentId: z.coerce.number().int().optional(),
+});
+
+/** Рейтинг пристроїв за спожитою енергією — «що споживає найбільше». */
+api.get('/energy/top', async (c) => {
+  const parsed = topConsumersSchema.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+
+  const { days, apartmentId } = parsed.data;
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 24 * 3600_000);
+
+  return c.json(await getTopConsumers({ apartmentId: apartmentId ?? null, from, to }));
 });
 
 const orderSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500) });
