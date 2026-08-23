@@ -115,3 +115,19 @@ export function insertValues(
   const params = rows.flatMap((row) => columns.map((col) => row[col]));
   return { placeholders, params };
 }
+
+/**
+ * D1 обмежує запит 100 зв'язаними параметрами (менше за десктопний
+ * SQLite з його 999/32766) — ліміт workerd, а не самого SQLite. Пакетні
+ * INSERT з багатьма рядками й кількома колонками легко впираються в
+ * нього (наприклад, 47 пристроїв × 6 колонок = 282), тому такі вставки
+ * розбиваються на пачки, що влазять під ліміт з запасом.
+ */
+export function chunkForD1<T>(rows: T[], columnsPerRow: number): T[][] {
+  const maxRowsPerBatch = Math.max(1, Math.floor(90 / columnsPerRow));
+  const batches: T[][] = [];
+  for (let i = 0; i < rows.length; i += maxRowsPerBatch) {
+    batches.push(rows.slice(i, i + maxRowsPerBatch));
+  }
+  return batches;
+}

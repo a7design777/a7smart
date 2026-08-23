@@ -1,4 +1,4 @@
-import { sql, insertValues } from './client.js';
+import { sql, insertValues, chunkForD1 } from './client.js';
 import type { DeviceKind } from '../tuya/normalize.js';
 
 export type Provider = 'tuya' | 'remihome';
@@ -180,31 +180,31 @@ export async function upsertDevices(
   if (devices.length === 0) return;
 
   const columns = ['external_id', 'provider', 'name', 'category', 'kind', 'source_zone'];
-  const { placeholders, params } = insertValues(
-    devices.map((d) => ({
-      external_id: d.id,
-      provider: d.provider,
-      name: d.name,
-      category: d.category,
-      kind: d.kind,
-      source_zone: d.sourceZone ?? null,
-    })),
-    columns,
-  );
+  const rows = devices.map((d) => ({
+    external_id: d.id,
+    provider: d.provider,
+    name: d.name,
+    category: d.category,
+    kind: d.kind,
+    source_zone: d.sourceZone ?? null,
+  }));
 
-  await sql.query(
-    `
-    INSERT INTO devices (${columns.join(', ')})
-    VALUES ${placeholders}
-    ON CONFLICT (external_id) DO UPDATE
-      SET provider    = excluded.provider,
-          category    = excluded.category,
-          kind        = excluded.kind,
-          source_zone = excluded.source_zone,
-          synced_at   = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-    `,
-    params,
-  );
+  for (const batch of chunkForD1(rows, columns.length)) {
+    const { placeholders, params } = insertValues(batch, columns);
+    await sql.query(
+      `
+      INSERT INTO devices (${columns.join(', ')})
+      VALUES ${placeholders}
+      ON CONFLICT (external_id) DO UPDATE
+        SET provider    = excluded.provider,
+            category    = excluded.category,
+            kind        = excluded.kind,
+            source_zone = excluded.source_zone,
+            synced_at   = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      `,
+      params,
+    );
+  }
   invalidateDevicesCache();
 }
 
@@ -214,12 +214,12 @@ export async function insertReadings(
   if (rows.length === 0) return;
 
   const columns = ['device_id', 'key', 'value'];
-  const { placeholders, params } = insertValues(
-    rows.map((r) => ({ device_id: r.deviceId, key: r.key, value: r.value })),
-    columns,
-  );
+  const values = rows.map((r) => ({ device_id: r.deviceId, key: r.key, value: r.value }));
 
-  await sql.query(`INSERT INTO readings (${columns.join(', ')}) VALUES ${placeholders}`, params);
+  for (const batch of chunkForD1(values, columns.length)) {
+    const { placeholders, params } = insertValues(batch, columns);
+    await sql.query(`INSERT INTO readings (${columns.join(', ')}) VALUES ${placeholders}`, params);
+  }
 }
 
 export interface HistoryPoint {
