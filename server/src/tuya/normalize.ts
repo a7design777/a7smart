@@ -322,4 +322,5 @@ export const HISTORICAL_KEYS = new Set([
   'power',
   'energy',
   'battery',
+  'gas',
 ]);

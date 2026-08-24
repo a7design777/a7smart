@@ -19,8 +19,8 @@ import type { Device } from './api';
 const CameraCard = lazy(() =>
   import('./components/CameraCard').then((m) => ({ default: m.CameraCard })),
 );
-const HistoryChart = lazy(() =>
-  import('./components/HistoryChart').then((m) => ({ default: m.HistoryChart })),
+const HistoryView = lazy(() =>
+  import('./components/HistoryView').then((m) => ({ default: m.HistoryView })),
 );
 const EnergyView = lazy(() =>
   import('./components/EnergyView').then((m) => ({ default: m.EnergyView })),
@@ -78,16 +78,6 @@ export function App() {
       sensors: [...by('sensor'), ...by('unknown')],
     };
   }, [visible]);
-
-  const charted = useMemo(
-    () =>
-      visible.flatMap((d) =>
-        (d.state?.metrics ?? [])
-          .filter((m) => ['temperature', 'humidity', 'power'].includes(m.key))
-          .map((m) => ({ device: d, metric: m })),
-      ),
-    [visible],
-  );
 
   if (loading) return <div className="empty">Завантаження…</div>;
   if (!authed) return <Login />;
@@ -187,21 +177,7 @@ export function App() {
 
       {view === 'history' && (
         <Suspense fallback={<div className="empty">Завантаження графіків…</div>}>
-          {charted.length === 0 ? (
-            <div className="empty">Немає показників для графіків</div>
-          ) : (
-            <div className="grid grid--wide">
-              {charted.map(({ device, metric }) => (
-                <HistoryChart
-                  key={`${device.id}-${metric.key}`}
-                  deviceId={device.id}
-                  deviceName={`${device.name} — ${metric.key}`}
-                  metricKey={metric.key}
-                  unit={metric.unit}
-                />
-              ))}
-            </div>
-          )}
+          <HistoryView devices={visible} />
         </Suspense>
       )}
 

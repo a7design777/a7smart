@@ -115,10 +115,15 @@ export const api = {
   cameraStream: (deviceId: string) =>
     request<{ url: string; expire: number | null }>(`/cameras/${deviceId}/stream`),
 
-  history: (deviceId: string, key: string, hours: number) =>
-    request<HistoryPoint[]>(
-      `/history?device=${encodeURIComponent(deviceId)}&key=${encodeURIComponent(key)}&hours=${hours}`,
-    ),
+  history: (deviceId: string, key: string, range: { hours: number } | { from: string; to: string }) => {
+    const period =
+      'hours' in range
+        ? `hours=${range.hours}`
+        : `from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+    return request<HistoryPoint[]>(
+      `/history?device=${encodeURIComponent(deviceId)}&key=${encodeURIComponent(key)}&${period}`,
+    );
+  },
 
   sync: () => request<{ count: number }>('/sync', { method: 'POST' }),
 
