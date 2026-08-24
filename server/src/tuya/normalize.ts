@@ -230,6 +230,18 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
     }
   }
 
+  // Деякі розетки (спостережено на Utyug) не скидають cur_power/cur_current
+  // до нуля, коли реле розімкнене — Tuya віддає останнє виміряне ненульове
+  // значення нескінченно довго, доки прилад знову не увімкнеться. Фізично
+  // струму немає, тому при вимкненому живленні показники струму примусово
+  // обнуляються — інакше "Енергія" рахує споживання вимкненого приладу.
+  const allGangsOff = gangs.length > 0 && gangs.every((g) => !g.on);
+  if (allGangsOff) {
+    for (const m of metrics) {
+      if (m.key === 'power' || m.key === 'current') m.value = 0;
+    }
+  }
+
   const targetItem = findCode(status, TARGET_TEMP_CODES);
 
   return {
