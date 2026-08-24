@@ -214,16 +214,22 @@ api.get('/cameras/:id/stream', async (c) => {
 const historySchema = z.object({
   device: z.string().min(1),
   key: z.string().min(1),
-  hours: z.coerce.number().int().min(1).max(24 * 90).default(24),
+  hours: z.coerce.number().int().min(1).max(24 * 90).optional(),
+  // Довільний діапазон — альтернатива hours для ручного вибору дат.
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 
 api.get('/history', async (c) => {
   const parsed = historySchema.safeParse(c.req.query());
   if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
 
-  const { device, key, hours } = parsed.data;
-  const to = new Date();
-  const from = new Date(to.getTime() - hours * 3600_000);
+  const { device, key } = parsed.data;
+  const to = parsed.data.to ?? new Date();
+  const from = parsed.data.from ?? new Date(to.getTime() - (parsed.data.hours ?? 24) * 3600_000);
+  const hours = (to.getTime() - from.getTime()) / 3600_000;
+
+  if (hours <= 0 || hours > 24 * 90) return c.json({ error: 'bad_request' }, 400);
 
   // Ціль — близько 100–200 точок на графік незалежно від періоду.
   const bucketMinutes = Math.max(5, Math.round((hours * 60) / 150 / 5) * 5);
