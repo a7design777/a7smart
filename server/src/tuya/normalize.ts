@@ -109,6 +109,23 @@ const GANG_LABELS: Record<string, string> = {
 const GANG_CODES = Object.keys(GANG_LABELS);
 
 /**
+ * Перемикачі камер (звірено з реальними DP через `npm run tuya:probe`
+ * на моделях Camera/Parking cam/Door Camera/Doorbell). Не канали
+ * живлення, тому в UI не отримують мітку «Живлення» навіть коли
+ * єдині — див. перевірку нижче при формуванні `gangs`.
+ */
+const CAMERA_TOGGLE_LABELS: Record<string, string> = {
+  motion_switch: 'Виявлення руху',
+  record_switch: 'Запис',
+  siren_switch: 'Сирена',
+  floodlight_switch: 'Прожектор',
+  basic_indicator: 'Індикатор',
+  decibel_switch: 'Виявлення звуку',
+};
+
+const CAMERA_TOGGLE_CODES = Object.keys(CAMERA_TOGGLE_LABELS);
+
+/**
  * Цільова температура.
  *
  * ВАЖЛИВО: у термостатах цього акаунта `temp_set` не масштабований —
@@ -205,6 +222,34 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
       continue;
     }
 
+    // Перемикачі камер: запис, виявлення руху/звуку, сирена, прожектор,
+    // індикатор. Не канали живлення, тому мітка "Живлення" на них не
+    // навішується — див. умову нижче при формуванні gangs.
+    if (CAMERA_TOGGLE_CODES.includes(item.code) && typeof item.value === 'boolean') {
+      gangs.push({
+        code: item.code,
+        label: CAMERA_TOGGLE_LABELS[item.code]!,
+        on: item.value,
+        onValue: true,
+        offValue: false,
+      });
+      continue;
+    }
+
+    // basic_private — "приватність": true означає камера закрита і НЕ
+    // веде моніторинг. Показуємо інвертовано як "Моніторинг", щоб
+    // увімкнений перемикач означав "камера стежить", а не навпаки.
+    if (item.code === 'basic_private' && typeof item.value === 'boolean') {
+      gangs.push({
+        code: 'basic_private',
+        label: 'Моніторинг',
+        on: !item.value,
+        onValue: false,
+        offValue: true,
+      });
+      continue;
+    }
+
     // Числові показники
     const metricSpec = METRICS[item.code];
     if (metricSpec && typeof item.value === 'number') {
@@ -232,11 +277,16 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
 
   // Деякі розетки (спостережено на Utyug) не скидають cur_power/cur_current
   // до нуля, коли реле розімкнене — Tuya віддає останнє виміряне ненульове
-  // значення нескінченно довго, доки прилад знову не увімкнеться. Фізично
-  // струму немає, тому при вимкненому живленні показники струму примусово
-  // обнуляються — інакше "Енергія" рахує споживання вимкненого приладу.
-  const allGangsOff = gangs.length > 0 && gangs.every((g) => !g.on);
-  if (allGangsOff) {
+  // значення нескінченно довго, доки прилад знову не увімкнеться. Гірше:
+  // коли прилад офлайн (витягнутий з розетки), Tuya віддає весь застарілий
+  // кеш статусу як є — включно з switch_1=true, якщо саме таким був стан
+  // перед втратою зв'язку. Офлайн-пристрій фізично не може зараз споживати
+  // струм, тому обидві умови обнуляють power/current.
+  // Лише канали живлення — перемикачі камер (motion_switch тощо) до
+  // споживання струму відношення не мають.
+  const powerGangs = gangs.filter((g) => GANG_CODES.includes(g.code));
+  const allGangsOff = powerGangs.length > 0 && powerGangs.every((g) => !g.on);
+  if (allGangsOff || !device.online) {
     for (const m of metrics) {
       if (m.key === 'power' || m.key === 'current') m.value = 0;
     }
@@ -249,8 +299,12 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
     name: device.name,
     kind: KIND_BY_CATEGORY[device.category] ?? 'unknown',
     online: device.online,
-    // Єдиний канал підписувати номером немає сенсу.
-    gangs: gangs.length === 1 ? [{ ...gangs[0]!, label: 'Живлення' }] : gangs,
+    // Єдиний канал підписувати номером немає сенсу — але лише коли це
+    // справді канал живлення, а не перемикач камери (запис, рух тощо).
+    gangs:
+      gangs.length === 1 && GANG_CODES.includes(gangs[0]!.code)
+        ? [{ ...gangs[0]!, label: 'Живлення' }]
+        : gangs,
     target:
       targetItem && typeof targetItem.value === 'number'
         ? { code: targetItem.code, value: targetItem.value, min: 5, max: 60 }
