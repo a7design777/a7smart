@@ -18,11 +18,25 @@ app.route('/api', api);
 /**
  * Статика зібраного React. Той самий контейнер віддає і API, і фронтенд —
  * так на Traefik потрібен лише один роутер, а в пам'яті один процес.
+ *
+ * Кешування розділене навмисно: файли в /assets мають хеш у назві
+ * (Vite), тому їх можна кешувати назавжди — новий білд це просто інший
+ * файл. index.html хешу не має, і без явного no-cache мобільні браузери
+ * (особливо Safari) кешують його агресивно й показують стару версію
+ * застосунку днями, навіть після деплою нового образу.
  */
 if (isProd) {
+  app.use('/assets/*', async (c, next) => {
+    c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    await next();
+  });
   app.use('/assets/*', serveStatic({ root: './web' }));
   app.get('/favicon.svg', serveStatic({ path: './web/favicon.svg' }));
   // SPA-фолбек: усе, що не /api, віддає index.html.
+  app.get('*', async (c, next) => {
+    c.header('Cache-Control', 'no-cache, must-revalidate');
+    await next();
+  });
   app.get('*', serveStatic({ path: './web/index.html' }));
 }
 

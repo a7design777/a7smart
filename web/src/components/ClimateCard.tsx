@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Device } from '../api';
 import { useStore } from '../store';
 import { Icon } from './Icon';
+import { Sparkline } from './Sparkline';
 
 /**
  * Клімат: живлення, поточна температура + керування цільовою.
@@ -125,6 +126,8 @@ export function ClimateCard({ device }: { device: Device }) {
           </div>
         </>
       )}
+
+      {current && state?.online && <Sparkline deviceId={device.id} metricKey="temperature" />}
 
       {!state?.online && <span className="card__sub">не в мережі</span>}
     </div>
