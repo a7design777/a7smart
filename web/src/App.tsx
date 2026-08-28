@@ -68,6 +68,27 @@ export function App() {
     [devices, activeApartmentId],
   );
 
+  /**
+   * Спрацьовані датчики (двері/вікна відчинені, протікання, газ) —
+   * по всіх квартирах одразу, а не лише вибраній: інакше тривога в
+   * квартирі нагорі лишалась би непоміченою, поки хтось не перемкне
+   * вкладку. Показуються нагорі Home, без потреби гортати до «Датчики».
+   */
+  const activeAlerts = useMemo(
+    () =>
+      devices.flatMap((d) =>
+        (d.state?.states ?? [])
+          .filter((s) => s.alarm)
+          .map((alarm) => ({
+            device: d,
+            alarm,
+            apartmentName:
+              apartments.find((a) => a.id === d.apartmentId)?.name ?? 'Без квартири',
+          })),
+      ),
+    [devices, apartments],
+  );
+
   const groups = useMemo(() => {
     const by = (kind: Device['kind']) => visible.filter((d) => d.kind === kind);
     return {
@@ -134,6 +155,22 @@ export function App() {
       <h1 className="page-title">{VIEW_LABEL[view]}</h1>
 
       {error && <div className="banner">{error}</div>}
+
+      {view === 'home' && activeAlerts.length > 0 && (
+        <div className="alert-list">
+          {activeAlerts.map(({ device, alarm, apartmentName }) => (
+            <div className="alert-row" key={`${device.id}-${alarm.code}`}>
+              <Icon name="alert" size={18} className="alert-row__icon" />
+              <div className="alert-row__body">
+                <span className="alert-row__title">{alarm.label}</span>
+                <span className="alert-row__sub">
+                  {device.name} · {apartmentName}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showTabs && (
         <div className="tabs" role="tablist" aria-label="Квартири">
