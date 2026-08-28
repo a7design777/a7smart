@@ -69,24 +69,28 @@ export function App() {
   );
 
   /**
-   * Спрацьовані датчики (двері/вікна відчинені, протікання, газ) —
-   * по всіх квартирах одразу, а не лише вибраній: інакше тривога в
-   * квартирі нагорі лишалась би непоміченою, поки хтось не перемкне
-   * вкладку. Показуються нагорі Home, без потреби гортати до «Датчики».
+   * Спрацьовані датчики (двері/вікна відчинені, протікання, газ) і
+   * майже розряджені батареї — у межах вибраної квартири (як «Усі»,
+   * так і решта секцій home), нагорі Home, без потреби гортати до
+   * «Датчики».
    */
   const activeAlerts = useMemo(
     () =>
-      devices.flatMap((d) =>
-        (d.state?.states ?? [])
-          .filter((s) => s.alarm)
-          .map((alarm) => ({
-            device: d,
-            alarm,
-            apartmentName:
-              apartments.find((a) => a.id === d.apartmentId)?.name ?? 'Без квартири',
-          })),
+      visible.flatMap((d) =>
+        (d.state?.states ?? []).filter((s) => s.alarm).map((alarm) => ({ device: d, alarm })),
       ),
-    [devices, apartments],
+    [visible],
+  );
+
+  const LOW_BATTERY_PERCENT = 2;
+  const lowBattery = useMemo(
+    () =>
+      visible.flatMap((d) =>
+        (d.state?.metrics ?? [])
+          .filter((m) => m.key === 'battery' && m.value <= LOW_BATTERY_PERCENT)
+          .map((metric) => ({ device: d, metric })),
+      ),
+    [visible],
   );
 
   const groups = useMemo(() => {
@@ -98,6 +102,16 @@ export function App() {
       switches: [...by('switch'), ...by('light')],
       sensors: [...by('sensor'), ...by('unknown')],
     };
+  }, [visible]);
+
+  const summary = useMemo(() => {
+    const online = visible.filter((d) => d.state?.online).length;
+    const on = visible.filter((d) => d.state?.gangs.some((g) => g.on)).length;
+    const totalPower = visible.reduce(
+      (sum, d) => sum + (d.state?.metrics.find((m) => m.key === 'power')?.value ?? 0),
+      0,
+    );
+    return { total: visible.length, online, on, totalPower };
   }, [visible]);
 
   if (loading) return <div className="empty">Завантаження…</div>;
@@ -156,22 +170,6 @@ export function App() {
 
       {error && <div className="banner">{error}</div>}
 
-      {view === 'home' && activeAlerts.length > 0 && (
-        <div className="alert-list">
-          {activeAlerts.map(({ device, alarm, apartmentName }) => (
-            <div className="alert-row" key={`${device.id}-${alarm.code}`}>
-              <Icon name="alert" size={18} className="alert-row__icon" />
-              <div className="alert-row__body">
-                <span className="alert-row__title">{alarm.label}</span>
-                <span className="alert-row__sub">
-                  {device.name} · {apartmentName}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {showTabs && (
         <div className="tabs" role="tablist" aria-label="Квартири">
           <button
@@ -194,6 +192,48 @@ export function App() {
             >
               {a.name}
             </button>
+          ))}
+        </div>
+      )}
+
+      {view === 'home' && !editMode && summary.total > 0 && (
+        <div className="summary-strip">
+          <div className="summary-stat">
+            <span className="summary-stat__value">
+              {summary.online}/{summary.total}
+            </span>
+            <span className="summary-stat__label">онлайн</span>
+          </div>
+          <div className="summary-stat">
+            <span className="summary-stat__value">{summary.on}</span>
+            <span className="summary-stat__label">увімкнено</span>
+          </div>
+          <div className="summary-stat">
+            <span className="summary-stat__value">{summary.totalPower.toFixed(0)} Вт</span>
+            <span className="summary-stat__label">зараз</span>
+          </div>
+        </div>
+      )}
+
+      {view === 'home' && !editMode && (activeAlerts.length > 0 || lowBattery.length > 0) && (
+        <div className="alert-list">
+          {activeAlerts.map(({ device, alarm }) => (
+            <div className="alert-row" key={`${device.id}-${alarm.code}`}>
+              <Icon name="alert" size={18} className="alert-row__icon" />
+              <div className="alert-row__body">
+                <span className="alert-row__title">{alarm.label}</span>
+                <span className="alert-row__sub">{device.name}</span>
+              </div>
+            </div>
+          ))}
+          {lowBattery.map(({ device, metric }) => (
+            <div className="alert-row" key={`${device.id}-${metric.code}`}>
+              <Icon name="alert" size={18} className="alert-row__icon" />
+              <div className="alert-row__body">
+                <span className="alert-row__title">Батарея {metric.value.toFixed(0)}%</span>
+                <span className="alert-row__sub">{device.name} · майже розряджена</span>
+              </div>
+            </div>
           ))}
         </div>
       )}

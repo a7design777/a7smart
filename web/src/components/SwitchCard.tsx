@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Device } from '../api';
 import { useStore } from '../store';
 import { Icon, KIND_ICON } from './Icon';
+import { Sparkline } from './Sparkline';
 
 /**
  * Розетка, вимикач або лампа.
@@ -76,6 +77,8 @@ export function SwitchCard({ device }: { device: Device }) {
           )}
         </div>
       )}
+
+      {powerMetric && state?.online && <Sparkline deviceId={device.id} metricKey="power" />}
 
       {!state?.online && <span className="card__sub">не в мережі</span>}
     </div>
