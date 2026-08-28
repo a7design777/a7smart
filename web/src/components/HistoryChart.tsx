@@ -67,6 +67,15 @@ export function HistoryChart({
       : d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
   };
 
+  /**
+   * Лише число, без одиниці — раніше `unit` навішувався на кожну позначку
+   * осі Y (`YAxis unit=" кВт·год"`), і повне значення на кшталт
+   * "0.2600000001 кВт·год" не влазило в ширину 44px та переносилось у
+   * нечитабельне місиво. Одиниця тепер показується один раз під графіком.
+   */
+  const maxValue = Math.max(0, ...data.map((p) => p.avg));
+  const formatYTick = (v: number) => v.toFixed(maxValue < 1 ? 2 : maxValue < 10 ? 1 : 0);
+
   return (
     <div className="card">
       <span className="card__name">{deviceName}</span>
@@ -95,7 +104,12 @@ export function HistoryChart({
                 fontSize={11}
                 minTickGap={28}
               />
-              <YAxis stroke="var(--muted)" fontSize={11} width={44} unit={unit ? ` ${unit}` : ''} />
+              <YAxis
+                stroke="var(--muted)"
+                fontSize={11}
+                width={38}
+                tickFormatter={formatYTick}
+              />
               <Tooltip
                 contentStyle={{
                   background: 'var(--surface)',
@@ -118,6 +132,7 @@ export function HistoryChart({
           </ResponsiveContainer>
         </div>
       )}
+      {data.length > 0 && !loading && <span className="card__sub">Вісь Y — {unit}</span>}
     </div>
   );
 }
