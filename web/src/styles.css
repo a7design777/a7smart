@@ -603,6 +603,46 @@ input {
   padding-left: 3px;
 }
 
+/* D-pad керування поворотом камери (PTZ) — 4 основні напрямки. */
+.camera__ptz {
+  display: grid;
+  grid-template-areas: '. up .' 'left . right' '. down .';
+  grid-template-columns: 40px 40px 40px;
+  grid-template-rows: 40px 40px 40px;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.camera__ptz-btn {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.camera__ptz-btn:disabled {
+  opacity: 0.5;
+}
+
+.camera__ptz-btn--up {
+  grid-area: up;
+}
+
+.camera__ptz-btn--down {
+  grid-area: down;
+}
+
+.camera__ptz-btn--left {
+  grid-area: left;
+}
+
+.camera__ptz-btn--right {
+  grid-area: right;
+}
+
 /* ── Login ──────────────────────────────────────────────── */
 
 .login {

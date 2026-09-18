@@ -46,7 +46,18 @@ export interface DeviceState {
   metrics: Metric[];
   states: StateFlag[];
   options: OptionControl[];
+  ptz: boolean;
 }
+
+export type PtzDirection =
+  | 'UP'
+  | 'RIGHT_UP'
+  | 'RIGHT'
+  | 'RIGHT_DOWN'
+  | 'DOWN'
+  | 'LEFT_DOWN'
+  | 'LEFT'
+  | 'LEFT_UP';
 
 export interface Device {
   id: string;
@@ -114,6 +125,12 @@ export const api = {
 
   cameraStream: (deviceId: string) =>
     request<{ url: string; expire: number | null }>(`/cameras/${deviceId}/stream`),
+
+  cameraPtz: (deviceId: string, direction: PtzDirection) =>
+    request<{ ok: true }>(`/cameras/${deviceId}/ptz`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    }),
 
   history: (deviceId: string, key: string, range: { hours: number } | { from: string; to: string }) => {
     const period =

@@ -247,3 +247,25 @@ export function allocateCameraStream(
     body: { type },
   });
 }
+
+export const PTZ_DIRECTIONS = [
+  'UP',
+  'RIGHT_UP',
+  'RIGHT',
+  'RIGHT_DOWN',
+  'DOWN',
+  'LEFT_DOWN',
+  'LEFT',
+  'LEFT_UP',
+] as const;
+
+export type PtzDirection = (typeof PTZ_DIRECTIONS)[number];
+
+/** Короткий поштовх камери в напрямку — офіційний cloud-ендпоїнт PTZ, не датапойнт. */
+export function ptzMove(deviceId: string, direction: PtzDirection): Promise<boolean> {
+  return tuyaRequest<boolean>({
+    path: `/v1.0/industry/ipc/${deviceId}/ptz-direction-control`,
+    method: 'POST',
+    body: { direction },
+  });
+}

@@ -3,6 +3,8 @@
  * у дусі SF Symbols. Замінює емодзі/юнікод-гліфи, які раніше стояли
  * замість системи іконок (⏻ ☀ 🌡 ◐ тощо).
  */
+import type { CSSProperties } from 'react';
+
 export type IconName =
   | 'devices'
   | 'scenes'
@@ -99,11 +101,13 @@ export function Icon({
   size = 20,
   strokeWidth = 1.75,
   className,
+  style,
 }: {
   name: IconName;
   size?: number;
   strokeWidth?: number;
   className?: string;
+  style?: CSSProperties;
 }) {
   return (
     <svg
@@ -116,6 +120,7 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      style={style}
       aria-hidden="true"
     >
       <path

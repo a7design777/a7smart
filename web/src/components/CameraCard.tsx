@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { api, type Device } from '../api';
+import { api, type Device, type PtzDirection } from '../api';
 import { Icon } from './Icon';
+
+/** Компактний 4-напрямковий D-pad. Діагоналі API підтримує, але на телефоні
+ *  вісім тісних кнопок незручні — досить основних чотирьох. */
+const PTZ_BUTTONS: Array<{ direction: PtzDirection; rotate: number; style: 'up' | 'down' | 'left' | 'right' }> = [
+  { direction: 'UP', rotate: 0, style: 'up' },
+  { direction: 'LEFT', rotate: -90, style: 'left' },
+  { direction: 'RIGHT', rotate: 90, style: 'right' },
+  { direction: 'DOWN', rotate: 180, style: 'down' },
+];
 
 /**
  * Живий перегляд камери.
@@ -22,6 +31,18 @@ export function CameraCard({ device }: { device: Device }) {
   const [loading, setLoading] = useState(false);
   /** Браузер може відхилити автозапуск — тоді потрібен явний жест. */
   const [needsGesture, setNeedsGesture] = useState(false);
+  const [ptzBusy, setPtzBusy] = useState<PtzDirection | null>(null);
+
+  async function move(direction: PtzDirection) {
+    setPtzBusy(direction);
+    try {
+      await api.cameraPtz(device.id, direction);
+    } catch {
+      // Мовчки: короткий поштовх, не варто піднімати банер через один збій.
+    } finally {
+      setPtzBusy(null);
+    }
+  }
 
   const play = useCallback(async () => {
     const video = videoRef.current;
@@ -124,6 +145,23 @@ export function CameraCard({ device }: { device: Device }) {
 
       {loading && <span className="card__sub">під'єднання…</span>}
       {error && <span className="card__sub">{error}</span>}
+
+      {active && device.state?.ptz && (
+        <div className="camera__ptz" role="group" aria-label="Керування поворотом камери">
+          {PTZ_BUTTONS.map(({ direction, rotate, style }) => (
+            <button
+              key={direction}
+              type="button"
+              className={`camera__ptz-btn camera__ptz-btn--${style}`}
+              disabled={ptzBusy !== null}
+              onClick={() => void move(direction)}
+              aria-label={`Повернути камеру: ${direction}`}
+            >
+              <Icon name="chevron-up" size={18} style={{ transform: `rotate(${rotate}deg)` }} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

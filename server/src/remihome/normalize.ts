@@ -193,5 +193,6 @@ export function normalizeRemihome(
     metrics,
     states,
     options,
+    ptz: false,
   };
 }

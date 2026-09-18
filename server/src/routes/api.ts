@@ -2,7 +2,13 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireAuth, verifyPassword, startSession, endSession } from '../auth.js';
 import { config } from '../config.js';
-import { sendCommands, allocateCameraStream, getStatusStrategy } from '../tuya/devices.js';
+import {
+  sendCommands,
+  allocateCameraStream,
+  getStatusStrategy,
+  ptzMove,
+  PTZ_DIRECTIONS,
+} from '../tuya/devices.js';
 import { TuyaApiError } from '../tuya/client.js';
 import { setRemihomeProperty } from '../remihome/devices.js';
 import { RemihomeError } from '../remihome/client.js';
@@ -203,6 +209,23 @@ api.get('/cameras/:id/stream', async (c) => {
   try {
     const stream = await allocateCameraStream(c.req.param('id'), 'hls');
     return c.json({ url: stream.url, expire: stream.expire ?? null });
+  } catch (err) {
+    if (err instanceof TuyaApiError) {
+      return c.json({ error: 'tuya_error', code: err.code, message: err.tuyaMessage }, 502);
+    }
+    throw err;
+  }
+});
+
+const ptzSchema = z.object({ direction: z.enum(PTZ_DIRECTIONS) });
+
+api.post('/cameras/:id/ptz', async (c) => {
+  const parsed = ptzSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+
+  try {
+    await ptzMove(c.req.param('id'), parsed.data.direction);
+    return c.json({ ok: true });
   } catch (err) {
     if (err instanceof TuyaApiError) {
       return c.json({ error: 'tuya_error', code: err.code, message: err.tuyaMessage }, 502);

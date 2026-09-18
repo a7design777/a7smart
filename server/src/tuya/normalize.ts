@@ -69,6 +69,8 @@ export interface NormalizedDevice {
   states: StateFlag[];
   /** Перемикачі з переліком варіантів. Порожньо для більшості пристроїв. */
   options: OptionControl[];
+  /** Камера вміє поворот/нахил (датапойнт ptz_control у статусі). */
+  ptz: boolean;
 }
 
 /** Категорія Tuya → тип пристрою в UI. Звірено з реальним акаунтом. */
@@ -212,6 +214,7 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
   const gangs: Gang[] = [];
   const metrics: Metric[] = [];
   const states: StateFlag[] = [];
+  const ptz = status.some((item) => item.code === 'ptz_control');
 
   for (const item of status) {
     // Канали керування
@@ -316,6 +319,7 @@ export function normalize(device: TuyaDevice, status: TuyaStatusItem[]): Normali
     metrics,
     states,
     options: [],
+    ptz,
   };
 }
 
