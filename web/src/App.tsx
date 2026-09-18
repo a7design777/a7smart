@@ -52,9 +52,13 @@ export function App() {
   const refresh = useStore((s) => s.refresh);
   const setApartment = useStore((s) => s.setApartment);
   const logout = useStore((s) => s.logout);
+  const mutedAlertDeviceIds = useStore((s) => s.mutedAlertDeviceIds);
+  const muteDeviceAlerts = useStore((s) => s.muteDeviceAlerts);
   const [view, setView] = useState<View>('home');
   const [editMode, setEditMode] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  /** «Закрити» ховає тривогу, доки вона не зникне і не спрацює заново. */
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const { theme, cycle } = useTheme();
   const unseenChangelog = useUnseenChangelog();
 
@@ -74,23 +78,51 @@ export function App() {
    * так і решта секцій home), нагорі Home, без потреби гортати до
    * «Датчики».
    */
+  const alertableDevices = useMemo(
+    () => visible.filter((d) => !mutedAlertDeviceIds.includes(d.id)),
+    [visible, mutedAlertDeviceIds],
+  );
+
   const activeAlerts = useMemo(
     () =>
-      visible.flatMap((d) =>
+      alertableDevices.flatMap((d) =>
         (d.state?.states ?? []).filter((s) => s.alarm).map((alarm) => ({ device: d, alarm })),
       ),
-    [visible],
+    [alertableDevices],
   );
 
   const LOW_BATTERY_PERCENT = 2;
   const lowBattery = useMemo(
     () =>
-      visible.flatMap((d) =>
+      alertableDevices.flatMap((d) =>
         (d.state?.metrics ?? [])
           .filter((m) => m.key === 'battery' && m.value <= LOW_BATTERY_PERCENT)
           .map((metric) => ({ device: d, metric })),
       ),
-    [visible],
+    [alertableDevices],
+  );
+
+  // «Закрити» — до наступного спрацювання. Якщо тривога зникла з переліку
+  // (пристрій прибрали з тривог, стан змінився), прибираємо її і з
+  // dismissedAlerts, інакше повторне спрацювання того ж коду мовчало б назавжди.
+  useEffect(() => {
+    const keys = new Set([
+      ...activeAlerts.map(({ device, alarm }) => `${device.id}:${alarm.code}`),
+      ...lowBattery.map(({ device, metric }) => `${device.id}:${metric.code}`),
+    ]);
+    setDismissedAlerts((prev) => {
+      if ([...prev].every((k) => keys.has(k))) return prev;
+      return new Set([...prev].filter((k) => keys.has(k)));
+    });
+  }, [activeAlerts, lowBattery]);
+
+  const visibleAlerts = useMemo(
+    () => activeAlerts.filter(({ device, alarm }) => !dismissedAlerts.has(`${device.id}:${alarm.code}`)),
+    [activeAlerts, dismissedAlerts],
+  );
+  const visibleLowBattery = useMemo(
+    () => lowBattery.filter(({ device, metric }) => !dismissedAlerts.has(`${device.id}:${metric.code}`)),
+    [lowBattery, dismissedAlerts],
   );
 
   const groups = useMemo(() => {
@@ -215,26 +247,72 @@ export function App() {
         </div>
       )}
 
-      {view === 'home' && !editMode && (activeAlerts.length > 0 || lowBattery.length > 0) && (
+      {view === 'home' && !editMode && (visibleAlerts.length > 0 || visibleLowBattery.length > 0) && (
         <div className="alert-list">
-          {activeAlerts.map(({ device, alarm }) => (
-            <div className="alert-row" key={`${device.id}-${alarm.code}`}>
-              <Icon name="alert" size={18} className="alert-row__icon" />
-              <div className="alert-row__body">
-                <span className="alert-row__title">{alarm.label}</span>
-                <span className="alert-row__sub">{device.name}</span>
+          {visibleAlerts.map(({ device, alarm }) => {
+            const key = `${device.id}:${alarm.code}`;
+            return (
+              <div className="alert-row" key={key}>
+                <Icon name="alert" size={18} className="alert-row__icon" />
+                <div className="alert-row__body">
+                  <span className="alert-row__title">{alarm.label}</span>
+                  <span className="alert-row__sub">{device.name}</span>
+                </div>
+                <div className="alert-row__actions">
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--sm"
+                    title="Закрити"
+                    aria-label="Закрити"
+                    onClick={() => setDismissedAlerts((prev) => new Set(prev).add(key))}
+                  >
+                    <Icon name="close" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--sm"
+                    title="Не показувати для цього пристрою"
+                    aria-label="Не показувати для цього пристрою"
+                    onClick={() => muteDeviceAlerts(device.id)}
+                  >
+                    <Icon name="bell-off" size={15} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-          {lowBattery.map(({ device, metric }) => (
-            <div className="alert-row" key={`${device.id}-${metric.code}`}>
-              <Icon name="alert" size={18} className="alert-row__icon" />
-              <div className="alert-row__body">
-                <span className="alert-row__title">Батарея {metric.value.toFixed(0)}%</span>
-                <span className="alert-row__sub">{device.name} · майже розряджена</span>
+            );
+          })}
+          {visibleLowBattery.map(({ device, metric }) => {
+            const key = `${device.id}:${metric.code}`;
+            return (
+              <div className="alert-row" key={key}>
+                <Icon name="alert" size={18} className="alert-row__icon" />
+                <div className="alert-row__body">
+                  <span className="alert-row__title">Батарея {metric.value.toFixed(0)}%</span>
+                  <span className="alert-row__sub">{device.name} · майже розряджена</span>
+                </div>
+                <div className="alert-row__actions">
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--sm"
+                    title="Закрити"
+                    aria-label="Закрити"
+                    onClick={() => setDismissedAlerts((prev) => new Set(prev).add(key))}
+                  >
+                    <Icon name="close" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--sm"
+                    title="Не показувати для цього пристрою"
+                    aria-label="Не показувати для цього пристрою"
+                    onClick={() => muteDeviceAlerts(device.id)}
+                  >
+                    <Icon name="bell-off" size={15} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

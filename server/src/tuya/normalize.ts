@@ -94,6 +94,10 @@ const KIND_BY_CATEGORY: Record<string, DeviceKind> = {
   ldcg: 'sensor', // датчик освітленості
   sp: 'camera', // камера
   dghsxj: 'camera', // камера (альт. категорія)
+  // Камери дачі (Gates/Terassa/Barbeque cam). /status для них завжди
+  // віддає 2003 "function not support" — датапойнтів не буде взагалі,
+  // але хоч потрапляють у розділ «Камери», а не губляться серед «Датчиків».
+  cdsxj: 'camera',
 };
 
 /** Підписи каналів багатоклавішних вимикачів. */

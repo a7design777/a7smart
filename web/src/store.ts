@@ -37,6 +37,12 @@ interface AppState {
   commitOrder: () => Promise<void>;
   rename: (deviceId: string, name: string) => Promise<void>;
 
+  mutedAlertDeviceIds: string[];
+  muteDeviceAlerts: (deviceId: string) => void;
+  unmuteDeviceAlerts: (deviceId: string) => void;
+  /** Ручна синхронізація каталогу з Tuya/Remihome. Повертає кількість нових пристроїв. */
+  syncDevices: () => Promise<number>;
+
   scenes: Scene[];
   loadScenes: () => Promise<void>;
   saveScene: (id: number | null, scene: SceneInput) => Promise<void>;
@@ -48,6 +54,22 @@ interface AppState {
 let apartmentChosen = false;
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Пристрої, для яких користувач вимкнув тривоги (двері/вікна, батарея). */
+const MUTED_ALERTS_KEY = 'a7smart.mutedAlertDevices';
+
+function loadMutedAlertDevices(): string[] {
+  try {
+    const raw = localStorage.getItem(MUTED_ALERTS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMutedAlertDevices(ids: string[]) {
+  localStorage.setItem(MUTED_ALERTS_KEY, JSON.stringify(ids));
+}
 
 export const useStore = create<AppState>((set, get) => ({
   authed: false,
@@ -242,6 +264,32 @@ export const useStore = create<AppState>((set, get) => ({
       set({ error: err instanceof Error ? err.message : String(err) });
       await get().refresh();
     }
+  },
+
+  mutedAlertDeviceIds: loadMutedAlertDevices(),
+
+  muteDeviceAlerts(deviceId) {
+    set((s) => {
+      if (s.mutedAlertDeviceIds.includes(deviceId)) return s;
+      const next = [...s.mutedAlertDeviceIds, deviceId];
+      saveMutedAlertDevices(next);
+      return { mutedAlertDeviceIds: next };
+    });
+  },
+
+  unmuteDeviceAlerts(deviceId) {
+    set((s) => {
+      const next = s.mutedAlertDeviceIds.filter((id) => id !== deviceId);
+      saveMutedAlertDevices(next);
+      return { mutedAlertDeviceIds: next };
+    });
+  },
+
+  async syncDevices() {
+    const before = new Set(get().devices.map((d) => d.id));
+    await api.sync();
+    await get().refresh();
+    return get().devices.filter((d) => !before.has(d.id)).length;
   },
 
   scenes: [],

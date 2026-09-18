@@ -14,9 +14,34 @@ export function ManageApartments() {
   const removeApartment = useStore((s) => s.removeApartment);
   const setMain = useStore((s) => s.setMain);
   const assign = useStore((s) => s.assign);
+  const syncDevices = useStore((s) => s.syncDevices);
+  const mutedAlertDeviceIds = useStore((s) => s.mutedAlertDeviceIds);
+  const unmuteDeviceAlerts = useStore((s) => s.unmuteDeviceAlerts);
 
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const mutedDevices = useMemo(
+    () => devices.filter((d) => mutedAlertDeviceIds.includes(d.id)),
+    [devices, mutedAlertDeviceIds],
+  );
+
+  async function onSync() {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const added = await syncDevices();
+      setSyncMessage(
+        added > 0
+          ? `Знайдено нових пристроїв: ${added}. Перетягніть їх із «Без квартири».`
+          : 'Нових пристроїв не знайдено.',
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const { drag, overZone, onPointerDown } = useDragAssign((deviceId, zone) => {
     void assign(deviceId, zone === UNASSIGNED ? null : Number(zone));
@@ -119,6 +144,20 @@ export function ManageApartments() {
         </button>
       </form>
 
+      <div className="manage-head" style={{ marginBottom: 18, alignItems: 'center' }}>
+        <button
+          type="button"
+          className="ghost-btn"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flex: '0 0 auto' }}
+          onClick={() => void onSync()}
+          disabled={syncing}
+        >
+          <Icon name="refresh" size={15} />
+          {syncing ? 'Синхронізація…' : 'Синхронізувати пристрої'}
+        </button>
+        {syncMessage && <span className="card__sub">{syncMessage}</span>}
+      </div>
+
       {apartments.map((a) =>
         renderZone(String(a.id), a.name, {
           isMain: a.is_main,
@@ -132,6 +171,34 @@ export function ManageApartments() {
       )}
 
       {renderZone(UNASSIGNED, 'Без квартири')}
+
+      {mutedDevices.length > 0 && (
+        <div className="dropzone">
+          <div className="dropzone__head">
+            <span className="dropzone__title">Вимкнені сповіщення</span>
+            <span className="card__sub">{mutedDevices.length}</span>
+          </div>
+          <div className="chip-list">
+            {mutedDevices.map((d) => (
+              <span key={d.id} className="chip">
+                <span className="chip__kind">
+                  <Icon name={KIND_ICON[d.kind]} size={14} />
+                </span>
+                <span className="chip__label">{d.name}</span>
+                <button
+                  type="button"
+                  className="icon-btn icon-btn--sm"
+                  title="Увімкнути сповіщення"
+                  aria-label="Увімкнути сповіщення"
+                  onClick={() => unmuteDeviceAlerts(d.id)}
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Копія, що летить за вказівником. Поза потоком, тому не впливає
           на layout і не перехоплює події. */}

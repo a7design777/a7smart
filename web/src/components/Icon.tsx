@@ -34,7 +34,9 @@ export type IconName =
   | 'wind'
   | 'play'
   | 'building'
-  | 'alert';
+  | 'alert'
+  | 'bell-off'
+  | 'refresh';
 
 const PATHS: Record<IconName, string> = {
   devices:
@@ -73,6 +75,10 @@ const PATHS: Record<IconName, string> = {
   play: 'M7 4.8v14.4L19 12 7 4.8Z',
   building: 'M5 21V6l7-3 7 3v15M9 21v-5h6v5M9 11h1m4 0h1M9 8h1m4 0h1',
   alert: 'M12 3.5 22 20H2L12 3.5Zm0 6v5.5m0 3h.01',
+  'bell-off':
+    'M9 5.2A3 3 0 0 1 12 3a3 3 0 0 1 3 2.9M7 8.2A6 6 0 0 0 6 11.7V15l-2 3h11M18 13v-1.3a6 6 0 0 0-.8-3M10 19a2 2 0 0 0 4 0M3 3l18 18',
+  refresh:
+    'M20 11A8 8 0 1 0 18.5 16M20 5v6h-6',
 };
 
 /** Категорія пристрою → іконка. Спільне для карток пристроїв і режиму редагування. */

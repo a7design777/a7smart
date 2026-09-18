@@ -1235,6 +1235,23 @@ input:focus-visible {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  flex: 1;
+}
+
+.alert-row__actions {
+  display: flex;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.icon-btn--sm {
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+}
+
+.icon-btn--sm:hover {
+  color: var(--danger);
 }
 
 .alert-row__title {

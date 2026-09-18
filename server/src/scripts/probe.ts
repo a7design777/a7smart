@@ -40,7 +40,7 @@ async function main() {
 
     // Камери перевіряємо окремо: наявність потоку — головне питання
     // після заміни icSee на Tuya.
-    if (d.category === 'sp' || d.category === 'dghsxj') {
+    if (d.category === 'sp' || d.category === 'dghsxj' || d.category === 'cdsxj') {
       try {
         const stream = await allocateCameraStream(d.id, 'hls');
         console.log(`  hls:      OK (${stream.url.slice(0, 60)}…)`);
