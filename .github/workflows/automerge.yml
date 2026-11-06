@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,3 +47,10 @@ jobs:
           git checkout main
           git merge --no-ff "origin/$BRANCH" -m "Auto-merge $BRANCH: $COMMIT_MSG"
           git push origin main
+
+      # Пуш від GITHUB_TOKEN не запускає інші workflow — збірку образу
+      # запускаємо явно, інакше сервер лишається на старому образі.
+      - name: Build image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build --ref main
