@@ -133,6 +133,71 @@ export async function renameDevice(tuyaId: string, name: string): Promise<void> 
   invalidateDevicesCache();
 }
 
+// ── Автоімпорт домогосподарств Tuya (tuyaHomes.ts) ──────────────────────────
+
+/** home_id → квартира. null — квартиру видалив користувач, не відтворювати. */
+export async function getTuyaHomeLinks(): Promise<Map<string, number | null>> {
+  const rows = await sql<Array<{ home_id: string; apartment_id: number | null }>>`
+    SELECT home_id, apartment_id FROM tuya_homes
+  `;
+  return new Map(rows.map((r) => [r.home_id, r.apartment_id]));
+}
+
+export async function linkTuyaHome(
+  homeId: string,
+  name: string,
+  apartmentId: number,
+): Promise<void> {
+  await sql`
+    INSERT INTO tuya_homes (home_id, name, apartment_id)
+    VALUES (${homeId}, ${name}, ${apartmentId})
+    ON CONFLICT (home_id) DO UPDATE SET name = excluded.name
+  `;
+}
+
+/** Поточні назви й квартири вибраних пристроїв (лише ті, що вже є в БД). */
+export async function getDevicesByIds(
+  ids: string[],
+): Promise<Map<string, { name: string; apartmentId: number | null }>> {
+  const out = new Map<string, { name: string; apartmentId: number | null }>();
+  for (const batch of chunkForD1(ids, 1)) {
+    const rows = await sql.query<
+      Array<{ external_id: string; name: string; apartment_id: number | null }>
+    >(
+      `SELECT external_id, name, apartment_id FROM devices
+       WHERE external_id IN (${batch.map(() => '?').join(', ')})`,
+      batch,
+    );
+    for (const r of rows) out.set(r.external_id, { name: r.name, apartmentId: r.apartment_id });
+  }
+  return out;
+}
+
+/** Прив'язує до квартири лише пристрої БЕЗ квартири — вручну розкладене не чіпає. */
+export async function assignUnassignedDevices(
+  ids: string[],
+  apartmentId: number,
+): Promise<void> {
+  for (const batch of chunkForD1(ids, 1)) {
+    await sql.query(
+      `UPDATE devices SET apartment_id = ?
+       WHERE apartment_id IS NULL AND external_id IN (${batch.map(() => '?').join(', ')})`,
+      [apartmentId, ...batch],
+    );
+  }
+  invalidateDevicesCache();
+}
+
+/** Перейменування лише якщо назву ще не змінювали (умова `name = from`). */
+export async function renameDeviceIfUnchanged(
+  id: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  await sql`UPDATE devices SET name = ${to} WHERE external_id = ${id} AND name = ${from}`;
+  invalidateDevicesCache();
+}
+
 /**
  * Порядок пристроїв на дашборді. Приймається повний список у потрібній
  * послідовності — так простіше й надійніше, ніж передавати зсуви:

@@ -9,6 +9,7 @@ import {
   getZoneByDevice,
 } from './remihome/devices.js';
 import { normalizeRemihome } from './remihome/normalize.js';
+import { syncTuyaHomes } from './tuyaHomes.js';
 import {
   listEnabledDevices,
   upsertDevices,
@@ -106,6 +107,12 @@ async function refreshCatalog(): Promise<void> {
       provider: 'tuya' as Provider,
     })),
   );
+
+  // Нові домогосподарства Tuya → квартири. Допоміжний крок: його збій
+  // (наприклад, ще не застосована міграція) не має зупиняти оновлення каталогу.
+  await syncTuyaHomes().catch((err) => {
+    console.error('[tuya-homes] синхронізація не вдалась:', err instanceof Error ? err.message : err);
+  });
 
   if (!isRemihomeConfigured()) return;
 
