@@ -95,6 +95,7 @@ api.get('/health', (c) =>
     // Remihome читається через недокументований інтерфейс, тому його стан
     // корисно бачити окремо: він може відвалитися незалежно від Tuya.
     remihome: health.remihome,
+    ha: health.ha,
   }),
 );
 
@@ -171,6 +172,9 @@ api.post('/devices/:id/command', async (c) => {
   if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
 
   const id = c.req.param('id');
+
+  // HA підключений лише для читання — керування вмикається окремим кроком.
+  if (getProvider(id) === 'ha') return c.json({ error: 'read_only' }, 403);
 
   try {
     if (getProvider(id) === 'remihome') {

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+const blankToUndefined = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => (v === '' ? undefined : v), inner);
+
 /**
  * Конфіг валідується на старті. Сервіс має падати одразу при відсутньому
  * ключі, а не через годину на першому запиті до Tuya.
@@ -27,6 +30,15 @@ const schema = z.object({
   REMIHOME_PASSWORD: z.string().min(1).optional(),
   // Число у шляху порталу: proxy.remihome.es/<ЦЕ>/RemicaHome/...
   REMIHOME_INSTALLATION: z.string().min(1).optional(),
+
+  // Home Assistant — необов'язкове джерело (лише читання). HA_URL — адреса
+  // тунелю до HA, напр. https://ha.example.com. Токен: профіль HA → Безпека.
+  // Порожнє значення з .env (`HA_URL=`) трактується як «не задано».
+  HA_URL: blankToUndefined(z.string().url().optional()),
+  HA_TOKEN: blankToUndefined(z.string().min(1).optional()),
+  // Якщо тунель закрито Cloudflare Access — service token.
+  HA_CF_ACCESS_CLIENT_ID: blankToUndefined(z.string().min(1).optional()),
+  HA_CF_ACCESS_CLIENT_SECRET: blankToUndefined(z.string().min(1).optional()),
 
   // Один спільний пароль на сім'ю — мультитенантності не передбачено.
   APP_PASSWORD_HASH: z.string().min(1, 'APP_PASSWORD_HASH порожній'),

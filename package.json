@@ -19,7 +19,8 @@
     "db:migrate": "npm run migrate --workspace server",
     "tuya:probe": "npm run probe --workspace server",
     "status": "npm run status --workspace server",
-    "remihome:probe": "npm run probe:remihome --workspace server"
+    "remihome:probe": "npm run probe:remihome --workspace server",
+    "ha:probe": "npm run probe:ha --workspace server"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

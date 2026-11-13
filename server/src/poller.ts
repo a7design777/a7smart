@@ -9,6 +9,14 @@ import {
   getZoneByDevice,
 } from './remihome/devices.js';
 import { normalizeRemihome } from './remihome/normalize.js';
+import { isHaConfigured } from './ha/client.js';
+import {
+  listHaDevices,
+  getHaStates,
+  dropTuyaDuplicates,
+  type HaDevice,
+} from './ha/devices.js';
+import { normalizeHa } from './ha/normalize.js';
 import { syncTuyaHomes } from './tuyaHomes.js';
 import {
   listEnabledDevices,
@@ -33,6 +41,7 @@ export const health = {
   lastError: null as string | null,
   authProblem: false,
   remihome: { enabled: false, lastError: null as string | null },
+  ha: { enabled: false, lastError: null as string | null },
 };
 
 export function getCachedState(deviceId: string) {
@@ -51,6 +60,7 @@ export function getAllCachedStates() {
 export function getProvider(deviceId: string): Provider | null {
   if (tuyaCatalog.some((d) => d.id === deviceId)) return 'tuya';
   if (remihomeCatalog.some((d) => d.code === deviceId)) return 'remihome';
+  if (haCatalog.some((d) => d.id === deviceId)) return 'ha';
   return null;
 }
 
@@ -80,6 +90,19 @@ export async function refreshDevice(deviceId: string): Promise<void> {
     return;
   }
 
+  if (provider === 'ha') {
+    const device = haCatalog.find((d) => d.id === deviceId);
+    if (!device) return;
+    // HA віддає всі стани одним локальним запитом — окремого шляху для
+    // одного пристрою немає, та він і не потрібен.
+    const cached = stateCache.get(deviceId);
+    stateCache.set(
+      deviceId,
+      normalizeHa({ ...device, name: cached?.name ?? device.name }, await getHaStates()),
+    );
+    return;
+  }
+
   const device = tuyaCatalog.find((d) => d.id === deviceId);
   if (!device) return;
   const status = await getDeviceStatus(deviceId);
@@ -95,6 +118,56 @@ let cycle = 0;
 
 let tuyaCatalog: Awaited<ReturnType<typeof listDevices>> = [];
 let remihomeCatalog: Awaited<ReturnType<typeof listRemihomeDevices>> = [];
+let haCatalog: HaDevice[] = [];
+
+/** Каталог HA. Як і Remihome, його відмова не має заважати Tuya. */
+async function refreshHaCatalog(): Promise<void> {
+  try {
+    haCatalog = dropTuyaDuplicates(
+      await listHaDevices(await getHaStates()),
+      new Set(tuyaCatalog.map((d) => d.id)),
+    );
+    await upsertDevices(
+      haCatalog.map((d) => ({
+        id: d.id,
+        name: d.name,
+        category: d.manufacturer ?? 'ha',
+        kind: 'sensor' as const,
+        provider: 'ha' as Provider,
+      })),
+    );
+    health.ha.lastError = null;
+  } catch (err) {
+    health.ha.lastError = err instanceof Error ? err.message : String(err);
+    console.error('[ha] каталог не оновлено:', health.ha.lastError);
+  }
+}
+
+async function pollHa(
+  rows: Awaited<ReturnType<typeof listEnabledDevices>>,
+): Promise<Array<{ deviceId: string; key: string; value: number }>> {
+  if (rows.length === 0) return [];
+
+  const byId = new Map(haCatalog.map((d) => [d.id, d]));
+  const states = await getHaStates();
+  const readings: Array<{ deviceId: string; key: string; value: number }> = [];
+
+  for (const row of rows) {
+    const device = byId.get(row.external_id);
+    if (!device) continue;
+
+    const normalized = normalizeHa({ ...device, name: row.name }, states);
+    stateCache.set(row.external_id, normalized);
+
+    for (const metric of normalized.metrics) {
+      if (HISTORICAL_KEYS.has(metric.key)) {
+        readings.push({ deviceId: row.external_id, key: metric.key, value: metric.value });
+      }
+    }
+  }
+
+  return readings;
+}
 
 async function refreshCatalog(): Promise<void> {
   tuyaCatalog = await listDevices();
@@ -113,6 +186,9 @@ async function refreshCatalog(): Promise<void> {
   await syncTuyaHomes().catch((err) => {
     console.error('[tuya-homes] синхронізація не вдалась:', err instanceof Error ? err.message : err);
   });
+
+  // Після Tuya: каталог HA прибирає ті пристрої, що вже є напряму.
+  if (isHaConfigured()) await refreshHaCatalog();
 
   if (!isRemihomeConfigured()) return;
 
@@ -219,11 +295,23 @@ async function pollOnce(): Promise<void> {
     }
   }
 
+  const haRows = rows.filter((r) => r.provider === 'ha');
+  if (isHaConfigured() && haRows.length > 0) {
+    try {
+      readings.push(...(await pollHa(haRows)));
+      health.ha.lastError = null;
+    } catch (err) {
+      health.ha.lastError = err instanceof Error ? err.message : String(err);
+      console.error('[ha] опитування не вдалося:', health.ha.lastError);
+    }
+  }
+
   await insertReadings(readings);
   health.lastPollAt = new Date();
   health.lastError = null;
   health.authProblem = false;
   health.remihome.enabled = isRemihomeConfigured();
+  health.ha.enabled = isHaConfigured();
 }
 
 let timer: NodeJS.Timeout | null = null;
@@ -264,5 +352,5 @@ export function stopPoller(): void {
 /** Ручна синхронізація каталогу з UI. */
 export async function syncDevices(): Promise<number> {
   await refreshCatalog();
-  return tuyaCatalog.length + remihomeCatalog.length;
+  return tuyaCatalog.length + remihomeCatalog.length + haCatalog.length;
 }

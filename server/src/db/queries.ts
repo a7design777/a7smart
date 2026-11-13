@@ -1,7 +1,7 @@
 import { sql, insertValues, chunkForD1 } from './client.js';
 import type { DeviceKind } from '../tuya/normalize.js';
 
-export type Provider = 'tuya' | 'remihome';
+export type Provider = 'tuya' | 'remihome' | 'ha';
 
 export interface DeviceRow {
   external_id: string;
