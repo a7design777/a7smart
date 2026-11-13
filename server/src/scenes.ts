@@ -39,6 +39,9 @@ export async function runScene(actions: SceneAction[]): Promise<ActionResult[]> 
   for (const action of actions) {
     const value = decode(action);
     try {
+      if (getProvider(action.device_id) === 'ha') {
+        throw new Error('Пристрої Home Assistant поки лише для читання');
+      }
       if (getProvider(action.device_id) === 'remihome') {
         await setRemihomeProperty(action.device_id, action.code, String(value));
       } else {

@@ -146,6 +146,18 @@ exec також для running_state та interruption_cause, але це діа
 **Ризик:** інтерфейс недокументований і може зламатися при оновленні порталу.
 Це свідомо прийнято.
 
+### Home Assistant — читання (server/src/ha/)
+
+REST API HA: `GET /api/states` (усі стани одним запитом) і `POST /api/template`
+(щоб згрупувати сутності в пристрої через `device_id()`). Токен — long-lived,
+у `HA_TOKEN`; HA_URL — тунель (Cloudflare Tunnel), за потреби з Access
+service-token заголовками. Один пристрій HA = один пристрій a7smart; числові
+`sensor` → метрики (ключ із `device_class`), решта сутностей → текстові стани.
+Службові пристрої HA (виробник «Home Assistant») відфільтровуються —
+**перевірити `npm run ha:probe` на живому HA**. Керування через HA ще не
+реалізоване: `/command` для таких пристроїв віддає 403 `read_only`.
+Відмова HA, як і Remihome, не валить Tuya (`/api/health` → `ha`).
+
 ---
 
 ## 5. Нормалізація — доменна модель
