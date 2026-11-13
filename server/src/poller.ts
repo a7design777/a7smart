@@ -17,6 +17,7 @@ import {
   type HaDevice,
 } from './ha/devices.js';
 import { normalizeHa } from './ha/normalize.js';
+import { syncTuyaHomes } from './tuyaHomes.js';
 import {
   listEnabledDevices,
   upsertDevices,
@@ -179,6 +180,12 @@ async function refreshCatalog(): Promise<void> {
       provider: 'tuya' as Provider,
     })),
   );
+
+  // Нові домогосподарства Tuya → квартири. Допоміжний крок: його збій
+  // (наприклад, ще не застосована міграція) не має зупиняти оновлення каталогу.
+  await syncTuyaHomes().catch((err) => {
+    console.error('[tuya-homes] синхронізація не вдалась:', err instanceof Error ? err.message : err);
+  });
 
   // Після Tuya: каталог HA прибирає ті пристрої, що вже є напряму.
   if (isHaConfigured()) await refreshHaCatalog();

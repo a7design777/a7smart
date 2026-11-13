@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { tuyaRequest } from './client.js';
+import { tuyaRequest, TuyaApiError } from './client.js';
 
 export interface TuyaDevice {
   id: string;
@@ -19,6 +19,31 @@ export interface TuyaStatusItem {
 export function listDevices(): Promise<TuyaDevice[]> {
   return tuyaRequest<TuyaDevice[]>({
     path: `/v1.0/users/${config.TUYA_UID}/devices`,
+    method: 'GET',
+  });
+}
+
+export interface TuyaHome {
+  home_id: number | string;
+  name: string;
+}
+
+/** Домогосподарства (homes) акаунта Smart Life. */
+export function listHomes(): Promise<TuyaHome[]> {
+  return tuyaRequest<TuyaHome[]>({
+    path: `/v1.0/users/${config.TUYA_UID}/homes`,
+    method: 'GET',
+  });
+}
+
+/**
+ * Пристрої одного домогосподарства — з назвами, які дав користувач у
+ * Smart Life. Загальний список акаунта для частини пристроїв (нові камери
+ * cdsxj) віддає узагальнені «Security Camera N».
+ */
+export function listHomeDevices(homeId: string): Promise<TuyaDevice[]> {
+  return tuyaRequest<TuyaDevice[]>({
+    path: `/v1.0/homes/${homeId}/devices`,
     method: 'GET',
   });
 }
@@ -91,7 +116,20 @@ async function bulkIot03(chunk: string[]): Promise<Map<string, TuyaStatusItem[]>
  */
 const problematic = new Set<string>();
 
-async function perDevice(chunk: string[]): Promise<Map<string, TuyaStatusItem[]>> {
+/**
+ * Код Tuya «function not support»: пристрій принципово не має API статусу
+ * (камери категорії cdsxj). Це не «отрута» для гуртового запиту — гуртовий
+ * виклик їх просто пропускає, — тож у problematic вони не потрапляють.
+ */
+const STATUS_NOT_SUPPORTED = 2003;
+
+/**
+ * @param strict кидати помилку, коли жоден пристрій пачки не відповів.
+ *   Для запасної стратегії це правильно: так видно, що Tuya недоступна
+ *   цілком. Для `problematic` — ні: там за визначенням лежать пристрої, які
+ *   не відповідають, і кидок убивав би цикл опитування для ВСІХ пристроїв.
+ */
+async function perDevice(chunk: string[], strict = true): Promise<Map<string, TuyaStatusItem[]>> {
   const result = new Map<string, TuyaStatusItem[]>();
   const broken: string[] = [];
 
@@ -107,7 +145,9 @@ async function perDevice(chunk: string[]): Promise<Map<string, TuyaStatusItem[]>
       problematic.delete(id);
     } else {
       broken.push(id);
-      if (!problematic.has(id)) {
+      const unsupported =
+        entry.reason instanceof TuyaApiError && entry.reason.code === STATUS_NOT_SUPPORTED;
+      if (!unsupported && !problematic.has(id)) {
         problematic.add(id);
         console.warn(
           `[tuya] пристрій ${id} не віддає статус — виключено з гуртових запитів`,
@@ -116,7 +156,7 @@ async function perDevice(chunk: string[]): Promise<Map<string, TuyaStatusItem[]>
     }
   }
 
-  if (result.size === 0 && broken.length === chunk.length && chunk.length > 1) {
+  if (strict && result.size === 0 && broken.length === chunk.length && chunk.length > 1) {
     throw new Error('жоден пристрій у пачці не віддав статус');
   }
   return result;
@@ -163,7 +203,9 @@ export async function getDevicesStatus(
   const suspect = valid.filter((id) => problematic.has(id));
 
   if (suspect.length > 0) {
-    for (const [id, status] of await perDevice(suspect)) {
+    // Не strict: усі підозрілі разом можуть бути «мертвими» — це не привід
+    // пропускати справні пристрої (саме так прод стояв із 22 жовтня).
+    for (const [id, status] of await perDevice(suspect, false)) {
       result.set(id, status);
     }
   }
