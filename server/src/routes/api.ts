@@ -20,6 +20,7 @@ import {
   syncDevices,
   getProvider,
   refreshDevice,
+  tryHaCommand,
   health,
 } from '../poller.js';
 import {
@@ -97,7 +98,7 @@ api.get('/health', (c) =>
     // Remihome читається через недокументований інтерфейс, тому його стан
     // корисно бачити окремо: він може відвалитися незалежно від Tuya.
     remihome: health.remihome,
-    ha: health.ha,
+    ha: { ...health.ha, control: config.HA_CONTROL },
   }),
 );
 
@@ -179,7 +180,8 @@ api.post('/devices/:id/command', async (c) => {
 
   const id = c.req.param('id');
 
-  // HA підключений лише для читання — керування вмикається окремим кроком.
+  // Пристрої, що існують лише в HA, лишаються тільки для читання; керування
+  // через HA стосується пристроїв Tuya (див. tryHaCommand).
   if (getProvider(id) === 'ha') return c.json({ error: 'read_only' }, 403);
 
   try {
@@ -187,7 +189,9 @@ api.post('/devices/:id/command', async (c) => {
       // Remihome приймає значення завжди рядком — навіть температуру.
       await setRemihomeProperty(id, parsed.data.code, String(parsed.data.value));
     } else {
-      await sendCommands(id, [parsed.data]);
+      // За HA_CONTROL=1 пробуємо шлях через HA; не вийшло — напряму в Tuya.
+      const viaHa = await tryHaCommand(id, parsed.data.code, parsed.data.value);
+      if (!viaHa) await sendCommands(id, [parsed.data]);
     }
 
     // Перечитуємо стан одразу: дашборд читає з кешу, який інакше

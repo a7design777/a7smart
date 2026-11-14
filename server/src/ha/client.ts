@@ -97,6 +97,49 @@ export async function haGetDailyForecast(entityId: string): Promise<unknown[]> {
   return data.service_response?.[entityId]?.forecast ?? [];
 }
 
+/**
+ * Єдині виклики сервісів HA, які ми дозволяємо для керування. Це явний
+ * список, а не довільний `/api/services/*`: ні замки, ні сигналізація, ні
+ * скрипти, ні перезавантаження HA звідси недосяжні.
+ */
+const CONTROL_ALLOWLIST: Record<string, readonly string[]> = {
+  switch: ['turn_on', 'turn_off'],
+  light: ['turn_on', 'turn_off'],
+  climate: ['turn_on', 'turn_off', 'set_temperature'],
+};
+
+export interface HaServiceCall {
+  domain: string;
+  service: string;
+  entityId: string;
+  /** Лише для climate.set_temperature. */
+  temperature?: number;
+}
+
+/** Виклик сервісу HA з allowlist. Усе інше відхиляється ще до запиту. */
+export async function haCallService(call: HaServiceCall): Promise<void> {
+  const allowed = CONTROL_ALLOWLIST[call.domain];
+  if (!allowed?.includes(call.service)) {
+    throw new HaError(`Сервіс ${call.domain}.${call.service} не дозволено`);
+  }
+  if (!call.entityId.startsWith(`${call.domain}.`) || !/^[a-z_]+\.[a-z0-9_]+$/.test(call.entityId)) {
+    throw new HaError(`Сутність ${call.entityId} не належить домену ${call.domain}`);
+  }
+
+  const body: Record<string, unknown> = { entity_id: call.entityId };
+  if (call.service === 'set_temperature') {
+    if (typeof call.temperature !== 'number' || call.temperature < 5 || call.temperature > 35) {
+      throw new HaError('Температура поза межами 5–35 °C');
+    }
+    body.temperature = call.temperature;
+  }
+
+  await request(`/api/services/${call.domain}/${call.service}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 /** Рендер Jinja-шаблону на стороні HA. Потрібен, щоб дізнатися device_id. */
 export async function haTemplate(template: string): Promise<string> {
   return request('/api/template', { method: 'POST', body: JSON.stringify({ template }) });
