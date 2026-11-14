@@ -1554,3 +1554,43 @@ input:focus-visible {
 :root[data-tv] .icon-btn--sm {
   display: none;
 }
+
+/* Картка зарядної станції */
+.station__main {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.station__soc {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+}
+.station__state {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+.station__bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-hi);
+  overflow: hidden;
+}
+.station__fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s;
+}
+.station__fill--ok {
+  background: var(--ok);
+}
+.station__fill--mid {
+  background: #ff9f0a;
+}
+.station__fill--low {
+  background: var(--danger);
+}
+.station__time {
+  font-size: 16px;
+}

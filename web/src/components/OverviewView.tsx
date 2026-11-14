@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { ClimateCard } from './ClimateCard';
 import { SwitchCard } from './SwitchCard';
 import { SensorCard } from './SensorCard';
+import { StationCard, isStation } from './StationCard';
 
 /** hls.js вантажиться лише коли реально є камери — див. коментар у App.tsx. */
 const CameraCard = lazy(() =>
@@ -182,7 +183,8 @@ export function OverviewView({ devices }: { devices: Device[] }) {
       cameras: by('camera'),
       climate: by('climate'),
       switches: [...by('switch'), ...by('light')],
-      sensors: [...by('sensor'), ...by('unknown')],
+      stations: by('sensor').filter(isStation),
+      sensors: [...by('sensor'), ...by('unknown')].filter((d) => !isStation(d)),
     };
   }, [devices]);
 
@@ -201,6 +203,17 @@ export function OverviewView({ devices }: { devices: Device[] }) {
               ))}
             </div>
           </Suspense>
+        </section>
+      )}
+
+      {groups.stations.length > 0 && (
+        <section className="ov-block">
+          <h2 className="section-title">Енергія</h2>
+          <div className="grid grid--wide">
+            {groups.stations.map((d) => (
+              <StationCard key={d.id} device={d} />
+            ))}
+          </div>
         </section>
       )}
 
