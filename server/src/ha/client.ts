@@ -80,6 +80,23 @@ export async function haGetStates(): Promise<HaState[]> {
   }
 }
 
+/**
+ * Прогноз погоди. У сучасному HA він не лежить в атрибутах сутності — його
+ * віддає лише сервіс `weather.get_forecasts`. Це ЄДИНИЙ виклик сервісу, який
+ * ми робимо: він лише читає (`return_response`), шлях і сервіс прописані
+ * жорстко, довільних викликів /api/services тут немає навмисно.
+ */
+export async function haGetDailyForecast(entityId: string): Promise<unknown[]> {
+  const text = await request('/api/services/weather/get_forecasts?return_response', {
+    method: 'POST',
+    body: JSON.stringify({ entity_id: entityId, type: 'daily' }),
+  });
+  const data = JSON.parse(text) as {
+    service_response?: Record<string, { forecast?: unknown[] }>;
+  };
+  return data.service_response?.[entityId]?.forecast ?? [];
+}
+
 /** Рендер Jinja-шаблону на стороні HA. Потрібен, щоб дізнатися device_id. */
 export async function haTemplate(template: string): Promise<string> {
   return request('/api/template', { method: 'POST', body: JSON.stringify({ template }) });

@@ -28,10 +28,20 @@ const EnergyView = lazy(() =>
 const ScenesView = lazy(() =>
   import('./components/ScenesView').then((m) => ({ default: m.ScenesView })),
 );
+const OverviewView = lazy(() =>
+  import('./components/OverviewView').then((m) => ({ default: m.OverviewView })),
+);
 
-type View = 'home' | 'scenes' | 'energy' | 'history' | 'manage';
+/**
+ * Режим ТВ/кіоску: адреса `/?tv=1`. Без навігації й кнопок керування,
+ * збільшений масштаб, екран не гасне. Сесія та ж, що й у решти (cookie).
+ */
+const TV_MODE = new URLSearchParams(window.location.search).get('tv') === '1';
+
+type View = 'overview' | 'home' | 'scenes' | 'energy' | 'history' | 'manage';
 
 const VIEW_LABEL: Record<View, string> = {
+  overview: 'Огляд',
   home: 'Пристрої',
   scenes: 'Сценарії',
   energy: 'Енергія',
@@ -40,6 +50,7 @@ const VIEW_LABEL: Record<View, string> = {
 };
 
 const VIEW_ICON: Record<View, IconName> = {
+  overview: 'building',
   home: 'devices',
   scenes: 'scenes',
   energy: 'energy',
@@ -54,7 +65,7 @@ export function App() {
   const logout = useStore((s) => s.logout);
   const mutedAlertDeviceIds = useStore((s) => s.mutedAlertDeviceIds);
   const muteDeviceAlerts = useStore((s) => s.muteDeviceAlerts);
-  const [view, setView] = useState<View>('home');
+  const [view, setView] = useState<View>('overview');
   const [editMode, setEditMode] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   /** «Закрити» ховає тривогу, доки вона не зникне і не спрацює заново. */
@@ -65,6 +76,30 @@ export function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // ТВ: масштаб через атрибут на <html> (див. styles.css) і утримання екрана.
+  useEffect(() => {
+    if (!TV_MODE) return;
+    document.documentElement.dataset.tv = '1';
+    let lock: { release: () => Promise<void> } | null = null;
+    const acquire = () => {
+      // Wake Lock є не скрізь (старі ТВ-браузери) — тоді просто без нього.
+      (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<typeof lock> } })
+        .wakeLock?.request('screen')
+        .then((l) => {
+          lock = l;
+        })
+        .catch(() => undefined);
+    };
+    acquire();
+    // Блокування знімається при згортанні вкладки — беремо знову.
+    const onVisible = () => document.visibilityState === 'visible' && acquire();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      void lock?.release();
+    };
+  }, []);
 
   const visible = useMemo(
     () =>
@@ -152,7 +187,8 @@ export function App() {
   const showTabs = apartments.length > 0 && view !== 'manage';
 
   return (
-    <div className="app">
+    <div className={`app${view === 'overview' ? ' app--wide' : ''}${TV_MODE ? ' app--tv' : ''}`}>
+      {!TV_MODE && (
       <header className="topbar">
         <span className="topbar__brand">a7smart</span>
         <div className="topbar__actions">
@@ -197,8 +233,9 @@ export function App() {
           </button>
         </div>
       </header>
+      )}
 
-      <h1 className="page-title">{VIEW_LABEL[view]}</h1>
+      {!TV_MODE && <h1 className="page-title">{VIEW_LABEL[view]}</h1>}
 
       {error && <div className="banner">{error}</div>}
 
@@ -228,7 +265,7 @@ export function App() {
         </div>
       )}
 
-      {view === 'home' && !editMode && summary.total > 0 && (
+      {(view === 'home' || view === 'overview') && !editMode && summary.total > 0 && (
         <div className="summary-strip">
           <div className="summary-stat">
             <span className="summary-stat__value">
@@ -247,7 +284,7 @@ export function App() {
         </div>
       )}
 
-      {view === 'home' && !editMode && (visibleAlerts.length > 0 || visibleLowBattery.length > 0) && (
+      {(view === 'home' || view === 'overview') && !editMode && (visibleAlerts.length > 0 || visibleLowBattery.length > 0) && (
         <div className="alert-list">
           {visibleAlerts.map(({ device, alarm }) => {
             const key = `${device.id}:${alarm.code}`;
@@ -314,6 +351,12 @@ export function App() {
             );
           })}
         </div>
+      )}
+
+      {view === 'overview' && (
+        <Suspense fallback={<div className="empty">Завантаження…</div>}>
+          <OverviewView devices={visible} />
+        </Suspense>
       )}
 
       {view === 'manage' && <ManageApartments />}
@@ -405,6 +448,7 @@ export function App() {
           </>
         ))}
 
+      {!TV_MODE && (
       <nav className="tabbar" role="tablist" aria-label="Розділи">
         {(Object.keys(VIEW_LABEL) as View[]).map((v) => (
           <button
@@ -422,6 +466,7 @@ export function App() {
           </button>
         ))}
       </nav>
+      )}
 
       {whatsNewOpen && <WhatsNew onClose={() => setWhatsNewOpen(false)} />}
     </div>

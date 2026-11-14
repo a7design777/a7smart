@@ -250,3 +250,36 @@ export interface HealthInfo {
   lastPollAt: string | null;
   lastError: string | null;
 }
+
+/** Погода, сонце й медіа з Home Assistant (лише читання, із кешу сервера). */
+export interface HaExtras {
+  weather: {
+    condition: string;
+    temperature: number | null;
+    humidity: number | null;
+    windSpeed: number | null;
+    pressure: number | null;
+    unit: string;
+  } | null;
+  forecast: Array<{
+    date: string;
+    condition: string;
+    temperature: number | null;
+    templow: number | null;
+    precipitation: number | null;
+  }>;
+  sun: { nextRising: string | null; nextSetting: string | null; aboveHorizon: boolean } | null;
+  media: Array<{
+    id: string;
+    name: string;
+    state: string;
+    title: string | null;
+    artist: string | null;
+    volume: number | null;
+  }>;
+  updatedAt: string;
+}
+
+export const overviewApi = {
+  extras: () => request<HaExtras>('/overview/extras'),
+};

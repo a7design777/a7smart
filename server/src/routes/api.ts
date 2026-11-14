@@ -11,6 +11,7 @@ import {
 } from '../tuya/devices.js';
 import { TuyaApiError } from '../tuya/client.js';
 import { setRemihomeProperty } from '../remihome/devices.js';
+import { getHaExtras } from '../ha/extras.js';
 import { RemihomeError } from '../remihome/client.js';
 import { runScene } from '../scenes.js';
 import {
@@ -156,6 +157,9 @@ api.get('/devices', async (c) => {
     })),
   );
 });
+
+/** Погода, сонце, медіа з HA — із кешу поллера, у HA запит не йде. */
+api.get('/overview/extras', (c) => c.json(getHaExtras()));
 
 api.get('/devices/:id/state', (c) => {
   const state = getCachedState(c.req.param('id'));
