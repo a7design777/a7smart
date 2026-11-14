@@ -26,6 +26,7 @@ import {
   listApartments,
   listEnabledDevices,
   getHistory,
+  getPresenceDaily,
   createApartment,
   renameApartment,
   deleteApartment,
@@ -108,6 +109,7 @@ api.use('/devices', requireAuth);
 api.use('/devices/*', requireAuth);
 api.use('/cameras/*', requireAuth);
 api.use('/history', requireAuth);
+api.use('/presence', requireAuth);
 api.use('/energy', requireAuth);
 api.use('/sync', requireAuth);
 
@@ -266,6 +268,38 @@ api.get('/history', async (c) => {
   const bucketMinutes = Math.max(5, Math.round((hours * 60) / 150 / 5) * 5);
 
   return c.json(await getHistory({ deviceId: device, key, from, to, bucketMinutes }));
+});
+
+const presenceSchema = z.object({
+  apartmentId: z.coerce.number().int(),
+  days: z.coerce.number().int().min(1).max(366).default(7),
+  // Зсув локального часу клієнта, хв на схід від UTC (Київ узимку = 120).
+  tz: z.coerce.number().int().min(-840).max(840).default(0),
+});
+
+/** Годин зі світлом / без нього за добу. «Нема даних» — решта до 24 год. */
+api.get('/presence', async (c) => {
+  const parsed = presenceSchema.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
+
+  const { apartmentId, days, tz } = parsed.data;
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 86_400_000);
+  const intervalHours = config.POLL_INTERVAL_MS / 3_600_000;
+
+  const rows = await getPresenceDaily({ apartmentId, from, to, offsetMinutes: tz });
+  return c.json({
+    apartmentId,
+    days: rows.map((r) => {
+      const on = Math.min(24, r.on_samples * intervalHours);
+      const covered = Math.min(24, r.samples * intervalHours);
+      return {
+        day: r.day,
+        onHours: Math.round(on * 10) / 10,
+        offHours: Math.round((covered - on) * 10) / 10,
+      };
+    }),
+  });
 });
 
 const assignSchema = z.object({ apartmentId: z.number().int().nullable() });

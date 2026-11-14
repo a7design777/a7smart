@@ -550,3 +550,61 @@ export function pruneReadings(olderThanDays: number): Promise<unknown> {
     WHERE ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ${`-${olderThanDays} days`})
   `;
 }
+
+export async function insertPresence(
+  rows: Array<{ apartmentId: number; online: number; total: number }>,
+): Promise<void> {
+  if (rows.length === 0) return;
+
+  const columns = ['apartment_id', 'online', 'total'];
+  const values = rows.map((r) => ({
+    apartment_id: r.apartmentId,
+    online: r.online,
+    total: r.total,
+  }));
+
+  for (const batch of chunkForD1(values, columns.length)) {
+    const { placeholders, params } = insertValues(batch, columns);
+    await sql.query(`INSERT INTO presence (${columns.join(', ')}) VALUES ${placeholders}`, params);
+  }
+}
+
+export interface PresenceDay {
+  day: string;
+  on_samples: number;
+  samples: number;
+}
+
+/**
+ * Скільки замірів за добу «світло є» (в мережі щонайменше половина пристроїв).
+ * Дні рахуються за локальним часом клієнта (зсув у хвилинах на схід від UTC).
+ */
+export function getPresenceDaily(opts: {
+  apartmentId: number;
+  from: Date;
+  to: Date;
+  offsetMinutes: number;
+}): Promise<PresenceDay[]> {
+  const shift = `${opts.offsetMinutes >= 0 ? '+' : '-'}${Math.abs(opts.offsetMinutes)} minutes`;
+  return sql<PresenceDay[]>`
+    SELECT
+      date(ts, ${shift}) AS day,
+      sum(CASE WHEN online * 2 >= total THEN 1 ELSE 0 END) AS on_samples,
+      count(*) AS samples
+    FROM presence
+    WHERE apartment_id = ${opts.apartmentId}
+      AND total > 0
+      AND ts >= ${opts.from.toISOString()}
+      AND ts <= ${opts.to.toISOString()}
+    GROUP BY day
+    ORDER BY day
+  `;
+}
+
+/** Присутність зберігаємо два роки: це історія для порівняння сезонів. */
+export function prunePresence(olderThanDays: number): Promise<unknown> {
+  return sql`
+    DELETE FROM presence
+    WHERE ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ${`-${olderThanDays} days`})
+  `;
+}

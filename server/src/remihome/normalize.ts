@@ -118,6 +118,8 @@ export function normalizeRemihome(
 
     const meta = spec.get(prop.name);
     const format = meta ? String(meta.format ?? '') : '';
+    // Вимкнений термостат віддає setpoint = null; Number(null) дало б 0 °C.
+    if (prop.value === null || prop.value === undefined) continue;
     const numeric = Number(prop.value);
     const isNumeric = format in UNIT_BY_FORMAT && Number.isFinite(numeric);
 
@@ -129,7 +131,9 @@ export function normalizeRemihome(
 
     if (isNumeric) {
       // Цільова температура — окреме поле моделі, а не звичайний показник.
-      if (prop.name === 'setpoint') {
+      // Лише якщо її справді можна змінювати: у Fancoil setpoint — display,
+      // повзунок для нього був би оманливим органом керування.
+      if (prop.name === 'setpoint' && editable) {
         target = { code: 'setpoint', value: numeric, min: 10, max: 30 };
         continue;
       }

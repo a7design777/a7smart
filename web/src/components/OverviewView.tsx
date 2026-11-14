@@ -11,6 +11,9 @@ import { StationCard, isStation } from './StationCard';
 const HistoryChart = lazy(() =>
   import('./HistoryChart').then((m) => ({ default: m.HistoryChart })),
 );
+const PowerChart = lazy(() =>
+  import('./PowerChart').then((m) => ({ default: m.PowerChart })),
+);
 const CameraCard = lazy(() =>
   import('./CameraCard').then((m) => ({ default: m.CameraCard })),
 );
@@ -174,17 +177,18 @@ function Media({ extras }: { extras: HaExtras | null }) {
 
 /* ── Налаштування розділів і графіків (на пристрої: ТВ і телефон різні) ── */
 
-type SectionId = 'forecast' | 'energy' | 'charts' | 'devices' | 'media';
+type SectionId = 'forecast' | 'energy' | 'power' | 'charts' | 'devices' | 'media';
 
 const SECTION_LABEL: Record<SectionId, string> = {
   forecast: 'Прогноз',
   energy: 'Енергія',
+  power: 'Світло',
   charts: 'Графіки',
   devices: 'Пристрої',
   media: 'Медіа',
 };
 
-const DEFAULT_ORDER: SectionId[] = ['forecast', 'energy', 'charts', 'devices', 'media'];
+const DEFAULT_ORDER: SectionId[] = ['forecast', 'energy', 'power', 'charts', 'devices', 'media'];
 
 const isSectionId = (id: string): id is SectionId => (DEFAULT_ORDER as string[]).includes(id);
 
@@ -343,6 +347,58 @@ function Charts({
   );
 }
 
+const POWER_PERIODS = [
+  { label: 'Тиждень', days: 7 },
+  { label: 'Місяць', days: 30 },
+  { label: 'Рік', days: 365 },
+] as const;
+
+/** Світло по квартирах: окремий графік для кожної, де є пристрої. */
+function Power({
+  apartments,
+  activeApartmentId,
+  devices,
+}: {
+  apartments: Apartment[];
+  activeApartmentId: number | null;
+  devices: Device[];
+}) {
+  const [days, setDays] = useState<number>(7);
+  const shown = apartments.filter(
+    (a) =>
+      (activeApartmentId === null || a.id === activeApartmentId) &&
+      devices.some((d) => d.apartmentId === a.id),
+  );
+  if (shown.length === 0) return null;
+
+  return (
+    <>
+      <div className="ov-toolbar">
+        <div className="segmented" role="group" aria-label="Період">
+          {POWER_PERIODS.map((p) => (
+            <button
+              key={p.days}
+              type="button"
+              className="segmented__item"
+              aria-pressed={days === p.days}
+              onClick={() => setDays(p.days)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <Suspense fallback={<div className="empty">Завантаження…</div>}>
+        <div className="grid grid--wide ov-charts">
+          {shown.map((a) => (
+            <PowerChart key={a.id} apartmentId={a.id} title={a.name} days={days} />
+          ))}
+        </div>
+      </Suspense>
+    </>
+  );
+}
+
 /** Пристрої однієї квартири (або всі разом), згруповані за типом. */
 function DeviceGroups({ devices }: { devices: Device[] }) {
   const by = (kind: Device['kind']) => devices.filter((d) => d.kind === kind);
@@ -458,6 +514,10 @@ export function OverviewView({
             ))}
           </div>
         ) : null;
+      case 'power':
+        return (
+          <Power apartments={apartments} activeApartmentId={activeApartmentId} devices={devices} />
+        );
       case 'charts':
         return <Charts devices={devices} prefs={prefs} update={update} isTv={isTv} />;
       case 'devices':
@@ -489,7 +549,7 @@ export function OverviewView({
         if (hidden && !editing) return null;
         const content = body(id);
         if (!content && !editing) return null;
-        const full = id === 'devices' || id === 'forecast' || id === 'charts';
+        const full = id === 'devices' || id === 'forecast' || id === 'charts' || id === 'power';
         return (
           <section
             key={id}
