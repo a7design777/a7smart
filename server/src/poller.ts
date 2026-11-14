@@ -9,6 +9,7 @@ import {
   getZoneByDevice,
 } from './remihome/devices.js';
 import { normalizeRemihome } from './remihome/normalize.js';
+import { getThermostatSchedule } from './remihome/schedule.js';
 import { isHaConfigured } from './ha/client.js';
 import {
   listHaDevices,
@@ -263,6 +264,9 @@ async function pollRemihome(
     if (!device || !props) continue;
 
     const normalized = normalizeRemihome({ ...device, name: row.name }, props);
+    if ((device.type?.category ?? []).some((c) => String(c).toLowerCase() === 'thermostat')) {
+      normalized.schedule = await getThermostatSchedule(device.code);
+    }
     stateCache.set(row.external_id, normalized);
 
     for (const metric of normalized.metrics) {

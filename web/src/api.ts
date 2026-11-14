@@ -47,6 +47,16 @@ export interface DeviceState {
   states: StateFlag[];
   options: OptionControl[];
   ptz: boolean;
+  /** Тижневий розклад термостата (Remihome), лише для показу. */
+  schedule?: ScheduleSlot[];
+}
+
+/** Проміжок розкладу: «HH:MM»–«HH:MM», дні 0 = пн … 6 = нд. */
+export interface ScheduleSlot {
+  start: string;
+  end: string;
+  days: number[];
+  temperature: number;
 }
 
 export type PtzDirection =

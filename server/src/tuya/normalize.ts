@@ -71,6 +71,16 @@ export interface NormalizedDevice {
   options: OptionControl[];
   /** Камера вміє поворот/нахил (датапойнт ptz_control у статусі). */
   ptz: boolean;
+  /** Тижневий розклад термостата (лише Remihome, лише читання). */
+  schedule?: ScheduleSlot[];
+}
+
+/** Проміжок розкладу: «HH:MM»–«HH:MM», дні тижня 0 = пн … 6 = нд. */
+export interface ScheduleSlot {
+  start: string;
+  end: string;
+  days: number[];
+  temperature: number;
 }
 
 /** Категорія Tuya → тип пристрою в UI. Звірено з реальним акаунтом. */

@@ -5,6 +5,32 @@ import { Icon } from './Icon';
 import { Sparkline } from './Sparkline';
 
 /**
+ * Графік термостата на сьогодні. Діє лише в режимі «Авто»; у ручному
+ * показуємо його приглушено, щоб було видно, що він є, але не працює.
+ */
+function ScheduleLine({ device }: { device: Device }) {
+  const slots = device.state?.schedule ?? [];
+  if (slots.length === 0) return null;
+
+  // 0 = понеділок (у Date.getDay() неділя = 0).
+  const today = (new Date().getDay() + 6) % 7;
+  const todays = slots.filter((s) => s.days.includes(today));
+  const auto = device.state?.options.find((o) => o.code === 'mode')?.value === 'auto';
+
+  return (
+    <div style={{ opacity: auto ? 1 : 0.6 }}>
+      <span className="card__sub">
+        Графік сьогодні:{' '}
+        {todays.length > 0
+          ? todays.map((s) => `${s.start}–${s.end} (${s.temperature}°)`).join(', ')
+          : 'опалення не заплановано'}
+      </span>
+      {!auto && <span className="card__sub">Зараз вручну — графік не діє</span>}
+    </div>
+  );
+}
+
+/**
  * Клімат: живлення, поточна температура + керування цільовою.
  *
  * Крок — 1 °C, бо `temp_set` у цих термостатах цілочисельний і
@@ -101,6 +127,8 @@ export function ClimateCard({ device }: { device: Device }) {
           </div>
         </div>
       ))}
+
+      <ScheduleLine device={device} />
 
       {target && draft !== null && (
         <>
