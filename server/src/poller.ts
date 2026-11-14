@@ -17,6 +17,7 @@ import {
   type HaDevice,
 } from './ha/devices.js';
 import { normalizeHa } from './ha/normalize.js';
+import { refreshHaExtras } from './ha/extras.js';
 import { syncTuyaHomes } from './tuyaHomes.js';
 import {
   listEnabledDevices,
@@ -146,10 +147,11 @@ async function refreshHaCatalog(): Promise<void> {
 async function pollHa(
   rows: Awaited<ReturnType<typeof listEnabledDevices>>,
 ): Promise<Array<{ deviceId: string; key: string; value: number }>> {
-  if (rows.length === 0) return [];
-
   const byId = new Map(haCatalog.map((d) => [d.id, d]));
   const states = await getHaStates();
+  // Погода/сонце/медіа для «Огляду» не залежать від того, чи є в a7smart
+  // пристрої HA (зараз усі збігаються з Tuya і відсіяні), тому оновлюються завжди.
+  await refreshHaExtras(states);
   const readings: Array<{ deviceId: string; key: string; value: number }> = [];
 
   for (const row of rows) {
@@ -296,7 +298,7 @@ async function pollOnce(): Promise<void> {
   }
 
   const haRows = rows.filter((r) => r.provider === 'ha');
-  if (isHaConfigured() && haRows.length > 0) {
+  if (isHaConfigured()) {
     try {
       readings.push(...(await pollHa(haRows)));
       health.ha.lastError = null;

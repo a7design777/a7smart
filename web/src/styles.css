@@ -1379,3 +1379,178 @@ input:focus-visible {
     animation: none !important;
   }
 }
+
+/* ── Огляд: телефон → планшет → ТВ ───────────────────────── */
+
+/* «Огляд» ширший за решту розділів: на планшеті й ТВ потрібні колонки. */
+.app--wide {
+  max-width: 1680px;
+}
+
+.overview {
+  display: grid;
+  gap: 4px 18px;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.ov-block--full {
+  grid-column: 1 / -1;
+}
+
+.ov-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 28px;
+  padding: 18px 20px;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.ov-hero__time {
+  display: flex;
+  flex-direction: column;
+}
+
+.ov-hero__clock {
+  font-size: 44px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-hero__date {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Лише перша літера: capitalize зробив би і «Листопада» з великої. */
+.ov-hero__date::first-letter {
+  text-transform: uppercase;
+}
+
+.ov-hero__weather {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ov-hero__temp {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.ov-hero__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ov-hero__cond {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ov-hero__sub,
+.ov-hero__sun {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ov-hero__sun {
+  margin-left: auto;
+}
+
+.ov-forecast {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ov-forecast__day {
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 12px 6px;
+}
+
+.ov-forecast__name {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.ov-forecast__cond {
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 2.4em;
+}
+
+.ov-forecast__temp {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.ov-forecast__temp small {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ov-forecast__rain {
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+/* Планшет: дві колонки, великі блоки — на всю ширину. */
+@media (min-width: 700px) {
+  .overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Широкий екран: три колонки. */
+@media (min-width: 1200px) {
+  .overview {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ov-hero__clock {
+    font-size: 56px;
+  }
+}
+
+/* ТВ: масштаб, чотири колонки, без елементів керування навігацією. Відстань
+   до екрана більша, тому все крупніше, а не щільніше. `zoom` є у Chromium і
+   Safari (ТВ-браузери — переважно вони), у Firefox — з 126. */
+:root[data-tv] .app {
+  max-width: none;
+  padding: 18px 28px 28px;
+  zoom: 1.45;
+}
+
+:root[data-tv] .overview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (min-width: 2200px) {
+  :root[data-tv] .overview {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* На ТВ немає курсора й дотику — підказки наведення й дрібні кнопки не потрібні. */
+:root[data-tv] .icon-btn--sm {
+  display: none;
+}
