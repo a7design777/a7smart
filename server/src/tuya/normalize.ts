@@ -331,4 +331,7 @@ export const HISTORICAL_KEYS = new Set([
   'energy',
   'battery',
   'gas',
+  // Зарядна станція (HA): сумарні вхід і вихід у Вт.
+  'input_power',
+  'output_power',
 ]);

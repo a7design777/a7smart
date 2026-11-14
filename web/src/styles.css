@@ -1594,3 +1594,66 @@ input:focus-visible {
 .station__time {
   font-size: 16px;
 }
+
+/* «Огляд»: розділи, квартири, графіки */
+.ov-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ov-head__tools {
+  display: flex;
+  gap: 6px;
+}
+.ov-edit {
+  display: flex;
+  justify-content: flex-end;
+}
+.ov-block--hidden {
+  opacity: 0.45;
+}
+.ov-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ov-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.ov-chip {
+  flex: 0 0 auto;
+}
+.ov-apartment {
+  margin-bottom: 22px;
+}
+.ov-apartment__name {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+.ov-sub {
+  margin: 14px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Темна тема «Огляду»: глибокі картки з тонкою рамкою, як на зразках. */
+:root[data-theme='dark'] .overview .card {
+  background: linear-gradient(160deg, #202024, #151518);
+  border: 1px solid var(--border);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .overview .card {
+    background: linear-gradient(160deg, #202024, #151518);
+    border: 1px solid var(--border);
+  }
+}

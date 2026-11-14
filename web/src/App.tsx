@@ -355,7 +355,11 @@ export function App() {
 
       {view === 'overview' && (
         <Suspense fallback={<div className="empty">Завантаження…</div>}>
-          <OverviewView devices={visible} />
+          <OverviewView
+            devices={visible}
+            apartments={apartments}
+            activeApartmentId={activeApartmentId}
+          />
         </Suspense>
       )}
 
