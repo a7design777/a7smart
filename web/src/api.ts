@@ -76,6 +76,11 @@ export interface Apartment {
   is_main: boolean;
 }
 
+export interface PresenceResponse {
+  apartmentId: number;
+  days: Array<{ day: string; onHours: number; offHours: number }>;
+}
+
 export interface HistoryPoint {
   bucket: string;
   avg: number;
@@ -141,6 +146,11 @@ export const api = {
       `/history?device=${encodeURIComponent(deviceId)}&key=${encodeURIComponent(key)}&${period}`,
     );
   },
+
+  presence: (apartmentId: number, days: number) =>
+    request<PresenceResponse>(
+      `/presence?apartmentId=${apartmentId}&days=${days}&tz=${-new Date().getTimezoneOffset()}`,
+    ),
 
   sync: () => request<{ count: number }>('/sync', { method: 'POST' }),
 

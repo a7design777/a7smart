@@ -23,7 +23,9 @@ import {
   listEnabledDevices,
   upsertDevices,
   insertReadings,
+  insertPresence,
   pruneReadings,
+  prunePresence,
   type Provider,
 } from './db/queries.js';
 
@@ -273,6 +275,32 @@ async function pollRemihome(
   return readings;
 }
 
+/**
+ * Скільки пристроїв кожної квартири зараз в мережі. З цього рахується, скільки
+ * годин на добу було світло: без електрики роутер і розетки зникають разом.
+ * Квартира без пристроїв у кеші заміру не отримує. Збій запису не повинен
+ * валити поллер.
+ */
+async function recordPresence(rows: Awaited<ReturnType<typeof listEnabledDevices>>): Promise<void> {
+  const byApartment = new Map<number, { online: number; total: number }>();
+  for (const row of rows) {
+    if (row.apartment_id === null) continue;
+    const state = stateCache.get(row.external_id);
+    if (!state) continue;
+    const entry = byApartment.get(row.apartment_id) ?? { online: 0, total: 0 };
+    entry.total++;
+    if (state.online) entry.online++;
+    byApartment.set(row.apartment_id, entry);
+  }
+  try {
+    await insertPresence(
+      [...byApartment].map(([apartmentId, v]) => ({ apartmentId, online: v.online, total: v.total })),
+    );
+  } catch (err) {
+    console.error('[presence]', err);
+  }
+}
+
 async function pollOnce(): Promise<void> {
   if (cycle % CATALOG_REFRESH_EVERY === 0 || tuyaCatalog.length === 0) {
     await refreshCatalog();
@@ -286,11 +314,14 @@ async function pollOnce(): Promise<void> {
   const remihomeRows = rows.filter((r) => r.provider === 'remihome');
 
   const readings = await pollTuya(tuyaRows);
+  // Провайдери, чиї стани в цьому циклі свіжі: збій Remihome/HA — не «світла нема».
+  const fresh = new Set<string>(['tuya']);
 
   if (isRemihomeConfigured() && remihomeRows.length > 0) {
     try {
       readings.push(...(await pollRemihome(remihomeRows)));
       health.remihome.lastError = null;
+      fresh.add('remihome');
     } catch (err) {
       health.remihome.lastError = err instanceof Error ? err.message : String(err);
       console.error('[remihome] опитування не вдалося:', health.remihome.lastError);
@@ -302,6 +333,7 @@ async function pollOnce(): Promise<void> {
     try {
       readings.push(...(await pollHa(haRows)));
       health.ha.lastError = null;
+      fresh.add('ha');
     } catch (err) {
       health.ha.lastError = err instanceof Error ? err.message : String(err);
       console.error('[ha] опитування не вдалося:', health.ha.lastError);
@@ -309,6 +341,7 @@ async function pollOnce(): Promise<void> {
   }
 
   await insertReadings(readings);
+  await recordPresence(rows.filter((r) => fresh.has(r.provider)));
   health.lastPollAt = new Date();
   health.lastError = null;
   health.authProblem = false;
@@ -341,6 +374,8 @@ export function startPoller(): void {
   pruneTimer = setInterval(
     () => {
       pruneReadings(90).catch((err) => console.error('[prune]', err));
+      prunePresence(730).catch((err: unknown) => console.error('[prune]', err));
+      prunePresence(730).catch((err) => console.error('[prune]', err));
     },
     24 * 60 * 60 * 1000,
   );
