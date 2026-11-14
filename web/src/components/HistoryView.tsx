@@ -1,18 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Device } from '../api';
+import { CHARTABLE_KEYS, METRIC_LABELS } from '../metricLabels';
 import { HistoryChart } from './HistoryChart';
 
-/** Ті самі ключі, що сервер зберігає в readings (HISTORICAL_KEYS). */
-const METRIC_LABELS: Record<string, string> = {
-  temperature: 'Температура',
-  humidity: 'Вологість',
-  power: 'Потужність',
-  energy: 'Спожито',
-  battery: 'Батарея',
-  gas: 'Газ',
-};
-
-const CHARTABLE_KEYS = Object.keys(METRIC_LABELS);
 
 const PRESETS = [
   { label: '24 год', hours: 24 },

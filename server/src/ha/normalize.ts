@@ -25,6 +25,25 @@ const KEY_BY_CLASS: Record<string, string> = {
   gas: 'gas',
 };
 
+/**
+ * Сутності зарядної станції (ha-fossibot), що мають власні ключі історії.
+ * Підсумкові вхід/вихід пишемо окремо; решта «power»-сенсорів станції не
+ * повинна займати спільний ключ `power` — це були б ватти лише одного порту.
+ */
+const STATION_KEYS: Array<[suffix: string, key: string | null]> = [
+  ['_total_input', 'input_power'],
+  ['_total_output', 'output_power'],
+  ['_ac_input', null],
+  ['_dc_input', null],
+  ['_usb_c_input', null],
+  ['_ac_output_power', null],
+  ['_inverter_output_power', null],
+];
+
+function stationKey(entityId: string): string | null | undefined {
+  return STATION_KEYS.find(([suffix]) => entityId.endsWith(suffix))?.[1];
+}
+
 /** binary_sensor, де `on` означає тривогу. */
 const ALARM_CLASSES = new Set([
   'moisture',
@@ -123,7 +142,9 @@ export function normalizeHa(
     if (domain === 'sensor' && state.state.trim() !== '' && Number.isFinite(numeric)) {
       // Два сенсори одного класу на пристрої (напр. дві температури) не
       // мають ділити ключ: історія пишеться за парою (пристрій, ключ).
-      const preferred = KEY_BY_CLASS[deviceClass] ?? OBJECT_ID(entityId);
+      const station = stationKey(entityId);
+      const preferred =
+        station ?? (station === null ? OBJECT_ID(entityId) : KEY_BY_CLASS[deviceClass] ?? OBJECT_ID(entityId));
       const key = usedKeys.has(preferred) ? OBJECT_ID(entityId) : preferred;
       usedKeys.add(key);
 
