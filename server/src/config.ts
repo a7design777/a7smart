@@ -40,6 +40,14 @@ const schema = z.object({
   HA_CF_ACCESS_CLIENT_ID: blankToUndefined(z.string().min(1).optional()),
   HA_CF_ACCESS_CLIENT_SECRET: blankToUndefined(z.string().min(1).optional()),
 
+  // Керування пристроями Tuya через HA. За замовчуванням вимкнено: команди
+  // йдуть у Tuya напряму. Значення `1` вмикає шлях через HA (із запасним
+  // шляхом напряму, якщо HA не впорався).
+  HA_CONTROL: z
+    .enum(['0', '1'])
+    .default('0')
+    .transform((v) => v === '1'),
+
   // Один спільний пароль на сім'ю — мультитенантності не передбачено.
   APP_PASSWORD_HASH: z.string().min(1, 'APP_PASSWORD_HASH порожній'),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET має бути ≥32 символів'),

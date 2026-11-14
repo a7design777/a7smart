@@ -10,7 +10,8 @@ import {
 } from './remihome/devices.js';
 import { normalizeRemihome } from './remihome/normalize.js';
 import { getThermostatSchedule } from './remihome/schedule.js';
-import { isHaConfigured } from './ha/client.js';
+import { isHaConfigured, haCallService } from './ha/client.js';
+import { planHaCommand } from './ha/control.js';
 import {
   listHaDevices,
   getHaStates,
@@ -123,12 +124,14 @@ let cycle = 0;
 let tuyaCatalog: Awaited<ReturnType<typeof listDevices>> = [];
 let remihomeCatalog: Awaited<ReturnType<typeof listRemihomeDevices>> = [];
 let haCatalog: HaDevice[] = [];
+/** Усі пристрої HA до відсіву дублів Tuya: потрібні, щоб відправляти команди через HA. */
+let haAll: HaDevice[] = [];
 
 /** Каталог HA. Як і Remihome, його відмова не має заважати Tuya. */
 async function refreshHaCatalog(): Promise<void> {
   try {
     haCatalog = dropTuyaDuplicates(
-      await listHaDevices(await getHaStates()),
+      (haAll = await listHaDevices(await getHaStates())),
       new Set(tuyaCatalog.map((d) => d.id)),
     );
     await upsertDevices(
@@ -394,4 +397,28 @@ export function stopPoller(): void {
 export async function syncDevices(): Promise<number> {
   await refreshCatalog();
   return tuyaCatalog.length + remihomeCatalog.length + haCatalog.length;
+}
+
+/**
+ * Спроба виконати команду Tuya через HA. Повертає true, лише якщо HA
+ * прийняв виклик. Будь-яка невідповідність чи збій — false, і викликач
+ * шле команду в Tuya напряму: керування через HA не має робити систему
+ * менш надійною, ніж вона була.
+ */
+export async function tryHaCommand(
+  deviceId: string,
+  code: string,
+  value: string | number | boolean,
+): Promise<boolean> {
+  if (!config.HA_CONTROL || !isHaConfigured()) return false;
+  try {
+    const plan = planHaCommand(deviceId, code, value, haAll, await getHaStates());
+    if (!plan) return false;
+    await haCallService(plan);
+    console.log(`[ha] команда через HA: ${plan.domain}.${plan.service} ${plan.entityId}`);
+    return true;
+  } catch (err) {
+    console.warn('[ha] команда через HA не вдалася, йдемо напряму:', err instanceof Error ? err.message : err);
+    return false;
+  }
 }
