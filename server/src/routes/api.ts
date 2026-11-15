@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, verifyPassword, startSession, endSession } from '../auth.js';
 import { config } from '../config.js';
 import { pickPowerDevice } from '../presence.js';
+import { tzOffsetMinutes, isValidTimezone } from '../timezone.js';
 import { isCameraControl, sendCameraProperty } from '../tuya/cameras.js';
 import {
   sendCommands,
@@ -29,6 +30,7 @@ import {
 import {
   listApartments,
   setPowerDevice,
+  setApartmentTimezone,
   listEnabledDevices,
   getHistory,
   getPresenceDaily,
@@ -158,6 +160,18 @@ api.patch('/apartments/:id/power-device', async (c) => {
     if (!device || device.apartment_id !== id) return c.json({ error: 'bad_request' }, 400);
   }
   await setPowerDevice(id, deviceId);
+  return c.json({ ok: true });
+});
+
+const timezoneSchema = z.object({ timezone: z.string().min(1).max(64) });
+
+api.patch('/apartments/:id/timezone', async (c) => {
+  const parsed = timezoneSchema.safeParse(await c.req.json().catch(() => null));
+  const id = Number(c.req.param('id'));
+  if (!parsed.success || !Number.isInteger(id) || !isValidTimezone(parsed.data.timezone)) {
+    return c.json({ error: 'bad_request' }, 400);
+  }
+  await setApartmentTimezone(id, parsed.data.timezone);
   return c.json({ ok: true });
 });
 
@@ -305,8 +319,6 @@ api.get('/history', async (c) => {
 const presenceSchema = z.object({
   apartmentId: z.coerce.number().int(),
   days: z.coerce.number().int().min(1).max(366).default(7),
-  // Зсув локального часу клієнта, хв на схід від UTC (Київ узимку = 120).
-  tz: z.coerce.number().int().min(-840).max(840).default(0),
 });
 
 /** Годин зі світлом / без нього за добу. «Нема даних» — решта до 24 год. */
@@ -314,13 +326,15 @@ api.get('/presence', async (c) => {
   const parsed = presenceSchema.safeParse(c.req.query());
   if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
 
-  const { apartmentId, days, tz } = parsed.data;
+  const { apartmentId, days } = parsed.data;
   const to = new Date();
   const from = new Date(to.getTime() - days * 86_400_000);
   const intervalHours = config.POLL_INTERVAL_MS / 3_600_000;
 
-  const rows = await getPresenceDaily({ apartmentId, from, to, offsetMinutes: tz });
   const apartment = (await listApartments()).find((a) => a.id === apartmentId);
+  // Межі діб — за часовим поясом квартири (Мадрид і Київ різняться на годину).
+  const offsetMinutes = apartment ? tzOffsetMinutes(apartment.timezone, to) : 0;
+  const rows = await getPresenceDaily({ apartmentId, from, to, offsetMinutes });
   const source = apartment ? pickPowerDevice(apartment, await listEnabledDevices()) : null;
   return c.json({
     apartmentId,

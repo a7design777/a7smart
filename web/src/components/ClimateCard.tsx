@@ -9,11 +9,14 @@ import { Sparkline } from './Sparkline';
  * показуємо його приглушено, щоб було видно, що він є, але не працює.
  */
 function ScheduleLine({ device }: { device: Device }) {
+  const apartments = useStore((s) => s.apartments);
   const slots = device.state?.schedule ?? [];
   if (slots.length === 0) return null;
 
-  // 0 = понеділок (у Date.getDay() неділя = 0).
-  const today = (new Date().getDay() + 6) % 7;
+  // День тижня — за поясом квартири (Мадрид і Київ можуть бути по різні боки опівночі).
+  const tz = apartments.find((a) => a.id === device.apartmentId)?.timezone;
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: tz }).format(new Date());
+  const today = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(weekday);
   const todays = slots.filter((s) => s.days.includes(today));
   const auto = device.state?.options.find((o) => o.code === 'mode')?.value === 'auto';
 

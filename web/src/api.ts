@@ -88,6 +88,8 @@ export interface Apartment {
   is_main: boolean;
   /** Пристрій-датчик світла; null — автовибір. */
   power_device_id: string | null;
+  /** IANA-пояс квартири (Europe/Kyiv, Europe/Madrid…). */
+  timezone: string;
 }
 
 export interface PresenceResponse {
@@ -164,9 +166,7 @@ export const api = {
   },
 
   presence: (apartmentId: number, days: number) =>
-    request<PresenceResponse>(
-      `/presence?apartmentId=${apartmentId}&days=${days}&tz=${-new Date().getTimezoneOffset()}`,
-    ),
+    request<PresenceResponse>(`/presence?apartmentId=${apartmentId}&days=${days}`),
 
   setPowerDevice: (apartmentId: number, deviceId: string | null) =>
     request<{ ok: true }>(`/apartments/${apartmentId}/power-device`, {

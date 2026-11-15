@@ -254,7 +254,7 @@ export async function refreshCamera(deviceId: string): Promise<void> {
   const cached = stateCache.get(deviceId);
   if (!cached || cached.kind !== 'camera') return;
   const next = { ...cached };
-  await attachCameraControls(next, true);
+  await attachCameraControls(next);
   stateCache.set(deviceId, next);
 }
 

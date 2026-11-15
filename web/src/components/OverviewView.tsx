@@ -84,7 +84,17 @@ function useNow(): Date {
   return now;
 }
 
-function Hero({ extras }: { extras: HaExtras | null }) {
+function Hero({
+  extras,
+  timeZone,
+  others,
+}: {
+  extras: HaExtras | null;
+  /** Пояс вибраної квартири; undefined — місцевий час пристрою. */
+  timeZone?: string;
+  /** Годинники інших поясів (на вкладці «Усі»). */
+  others: Array<{ label: string; timeZone: string }>;
+}) {
   const now = useNow();
   const w = extras?.weather;
 
@@ -92,11 +102,26 @@ function Hero({ extras }: { extras: HaExtras | null }) {
     <section className="ov-hero ov-block--full">
       <div className="ov-hero__time">
         <span className="ov-hero__clock">
-          {now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+          {now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', timeZone })}
         </span>
         <span className="ov-hero__date">
-          {now.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {now.toLocaleDateString('uk-UA', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            timeZone,
+          })}
         </span>
+        {others.length > 0 && (
+          <span className="ov-hero__date">
+            {others
+              .map(
+                (o) =>
+                  `${o.label} ${now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', timeZone: o.timeZone })}`,
+              )
+              .join(' · ')}
+          </span>
+        )}
       </div>
 
       {w && (
@@ -477,6 +502,17 @@ export function OverviewView({
 
   const stations = useMemo(() => devices.filter(isStation), [devices]);
 
+  // Вкладка квартири показує її час; «Усі» — місцевий і години інших поясів.
+  const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const activeTimeZone = apartments.find((a) => a.id === activeApartmentId)?.timezone;
+  const otherClocks = useMemo(() => {
+    if (activeApartmentId !== null) return [];
+    const seen = new Set<string>([localZone]);
+    return apartments
+      .filter((a) => a.timezone && !seen.has(a.timezone) && seen.add(a.timezone))
+      .map((a) => ({ label: a.name, timeZone: a.timezone }));
+  }, [apartments, activeApartmentId, localZone]);
+
   // «Усі»: кожна квартира окремим блоком; пристрої без квартири — в кінці.
   const apartmentBlocks = useMemo(() => {
     const rest = devices.filter((d) => !isStation(d));
@@ -540,7 +576,7 @@ export function OverviewView({
 
   return (
     <div className="overview">
-      <Hero extras={extras} />
+      <Hero extras={extras} timeZone={activeTimeZone} others={otherClocks} />
 
       {!isTv && (
         <div className="ov-block ov-block--full ov-edit">
