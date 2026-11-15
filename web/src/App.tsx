@@ -58,6 +58,12 @@ const VIEW_ICON: Record<View, IconName> = {
   manage: 'apartments',
 };
 
+/** Рівень заряду пристрою, якщо він його віддає, — цілим відсотком. */
+function batteryOf(device: Device): number | null {
+  const m = device.state?.metrics.find((x) => x.key === 'battery');
+  return m ? Math.round(m.value) : null;
+}
+
 export function App() {
   const { authed, loading, error, apartments, devices, activeApartmentId } = useStore();
   const refresh = useStore((s) => s.refresh);
@@ -293,7 +299,10 @@ export function App() {
                 <Icon name="alert" size={18} className="alert-row__icon" />
                 <div className="alert-row__body">
                   <span className="alert-row__title">{alarm.label}</span>
-                  <span className="alert-row__sub">{device.name}</span>
+                  <span className="alert-row__sub">
+                    {device.name}
+                    {batteryOf(device) !== null && ` · заряд ${batteryOf(device)}%`}
+                  </span>
                 </div>
                 <div className="alert-row__actions">
                   <button

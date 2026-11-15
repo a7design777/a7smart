@@ -121,5 +121,12 @@ export async function sendCameraProperty(
     console.warn('[tuya] issue не вдалося, пробуємо команди v1:', err instanceof Error ? err.message : err);
     await sendCommands(deviceId, [{ code, value }]);
   }
-  cache.delete(deviceId);
+  // Тіньова модель Tuya оновлюється із запізненням, і негайне перечитування
+  // повернуло б старе значення — тож записане значення кладемо в кеш одразу
+  // й перечитуємо з хмари приблизно за хвилину.
+  const hit = cache.get(deviceId);
+  if (hit) {
+    hit.props.set(code, value);
+    hit.at = Date.now() - TTL_MS + 60_000;
+  }
 }

@@ -21,9 +21,27 @@ const PTZ_BUTTONS: Array<{ direction: PtzDirection; rotate: number; style: 'up' 
 function CameraSettings({ device }: { device: Device }) {
   const sendCommand = useStore((s) => s.sendCommand);
   const [open, setOpen] = useState(false);
-  const controls = device.state?.controls ?? [];
-  const options = device.state?.options ?? [];
+  const serverControls = device.state?.controls ?? [];
+  const serverOptions = device.state?.options ?? [];
+  // Оптимістичні значення: хмара відповідає з запізненням, і без цього
+  // перемикач після дотику здавався б «не реагує».
+  const [pending, setPending] = useState<Record<string, string | boolean>>({});
+  const controls = serverControls.map((c) => ({ ...c, on: (pending[c.code] as boolean | undefined) ?? c.on }));
+  const options = serverOptions.map((o) => ({ ...o, value: (pending[o.code] as string | undefined) ?? o.value }));
   if (controls.length === 0 && options.length === 0) return null;
+
+  const apply = (code: string, value: string | boolean) => {
+    setPending((p) => ({ ...p, [code]: value }));
+    void sendCommand(device.id, code, value);
+    // Якщо камера так і не підтвердила — повертаємо те, що каже сервер.
+    setTimeout(() => {
+      setPending((p) => {
+        const next = { ...p };
+        delete next[code];
+        return next;
+      });
+    }, 8000);
+  };
 
   return (
     <div>
@@ -43,7 +61,7 @@ function CameraSettings({ device }: { device: Device }) {
                     type="button"
                     className="segmented__item"
                     aria-pressed={opt.value === choice.value}
-                    onClick={() => void sendCommand(device.id, opt.code, choice.value)}
+                    onClick={() => apply(opt.code, choice.value)}
                   >
                     {choice.label}
                   </button>
@@ -59,7 +77,7 @@ function CameraSettings({ device }: { device: Device }) {
                 type="button"
                 className="segmented__item ov-chip"
                 aria-pressed={c.on}
-                onClick={() => void sendCommand(device.id, c.code, !c.on)}
+                onClick={() => apply(c.code, !c.on)}
               >
                 {c.label}
               </button>

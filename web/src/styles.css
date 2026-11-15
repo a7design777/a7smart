@@ -1664,3 +1664,19 @@ input:focus-visible {
   gap: 10px;
   margin-top: 8px;
 }
+
+/* Тривоги на широкому екрані: сіткою, щільніше, а не стовпцем на всю ширину. */
+@media (min-width: 900px) {
+  .alert-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 6px;
+  }
+  .alert-row {
+    padding: 7px 10px;
+    gap: 8px;
+  }
+  .alert-row__title {
+    font-size: 13px;
+  }
+}
