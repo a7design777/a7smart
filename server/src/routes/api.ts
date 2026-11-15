@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { pickPowerDevice } from '../presence.js';
 import { tzOffsetMinutes, isValidTimezone } from '../timezone.js';
 import { getLocationExtras } from '../weather.js';
-import { isCameraControl, sendCameraProperty } from '../tuya/cameras.js';
+import { isCameraControl, sendCameraProperty, ptzByProperties } from '../tuya/cameras.js';
 import {
   sendCommands,
   allocateCameraStream,
@@ -310,12 +310,27 @@ api.get('/cameras/:id/stream', async (c) => {
 
 const ptzSchema = z.object({ direction: z.enum(PTZ_DIRECTIONS) });
 
+let industryPtzBlocked = false;
+
 api.post('/cameras/:id/ptz', async (c) => {
   const parsed = ptzSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: 'bad_request' }, 400);
 
   try {
-    await ptzMove(c.req.param('id'), parsed.data.direction);
+    const id = c.req.param('id');
+    // Офіційний ендпоїнт повороту в цьому проєкті Tuya не підключений
+    // (28841101) — після першої відмови одразу йдемо через властивості.
+    if (!industryPtzBlocked) {
+      try {
+        await ptzMove(id, parsed.data.direction);
+        return c.json({ ok: true });
+      } catch (err) {
+        if (!(err instanceof TuyaApiError && err.code === 28841101)) throw err;
+        industryPtzBlocked = true;
+        console.warn('[ptz] ендпоїнт industry/ipc не підключений, переходимо на ptz_control');
+      }
+    }
+    await ptzByProperties(id, parsed.data.direction);
     return c.json({ ok: true });
   } catch (err) {
     console.warn('[ptz] не вдалося:', c.req.param('id'), parsed.data.direction, err instanceof Error ? err.message : err);
