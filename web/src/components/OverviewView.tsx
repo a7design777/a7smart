@@ -391,7 +391,13 @@ function Power({
       <Suspense fallback={<div className="empty">Завантаження…</div>}>
         <div className="grid grid--wide ov-charts">
           {shown.map((a) => (
-            <PowerChart key={a.id} apartmentId={a.id} title={a.name} days={days} />
+            <PowerChart
+              key={a.id}
+              apartmentId={a.id}
+              title={a.name}
+              days={days}
+              devices={devices.filter((d) => d.apartmentId === a.id)}
+            />
           ))}
         </div>
       </Suspense>
