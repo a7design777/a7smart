@@ -100,6 +100,57 @@ export function buildCameraControls(props: Map<string, unknown>): {
 }
 
 /**
+ * Поворот камери через властивості (thing model): `ptz_control` задає
+ * напрямок, `ptz_stop` зупиняє рух. Потрібен, коли офіційний cloud-ендпоїнт
+ * повороту не підключений у проєкті Tuya IoT (помилка 28841101).
+ *
+ * Значення `ptz_control` — за стандартним набором інструкцій Tuya для IPC:
+ * 0 вгору, 1 вправо-вгору, 2 вправо, 3 вправо-вниз, 4 вниз, 5 вліво-вниз,
+ * 6 вліво, 7 вліво-вгору. В Android- та iOS-SDK Tuya значення 0 і 6 описані
+ * по-різному, тож напрямок слід перевірити на камері.
+ */
+const PTZ_VALUE: Record<string, string> = {
+  UP: '0',
+  RIGHT_UP: '1',
+  RIGHT: '2',
+  RIGHT_DOWN: '3',
+  DOWN: '4',
+  LEFT_DOWN: '5',
+  LEFT: '6',
+  LEFT_UP: '7',
+};
+
+/** Скільки камера рухається до команди зупинки: короткий поштовх, а не безперервний поворот. */
+const PTZ_PULSE_MS = 600;
+
+export async function ptzByProperties(deviceId: string, direction: string): Promise<void> {
+  const value = PTZ_VALUE[direction];
+  if (value === undefined) throw new Error(`Невідомий напрямок ${direction}`);
+
+  await issueProperty(deviceId, 'ptz_control', value);
+  await new Promise((r) => setTimeout(r, PTZ_PULSE_MS));
+  await issueProperty(deviceId, 'ptz_stop', true);
+}
+
+/** Записати одну властивість: спершу `issue` із рядковим `properties`, потім команди v1. */
+async function issueProperty(
+  deviceId: string,
+  code: string,
+  value: string | number | boolean,
+): Promise<void> {
+  try {
+    await tuyaRequest<boolean>({
+      path: `/v2.0/cloud/thing/${deviceId}/shadow/properties/issue`,
+      method: 'POST',
+      body: { properties: JSON.stringify({ [code]: value }) },
+    });
+  } catch (err) {
+    console.warn('[tuya] issue не вдалося, пробуємо команди v1:', err instanceof Error ? err.message : err);
+    await sendCommands(deviceId, [{ code, value }]);
+  }
+}
+
+/**
  * Записати налаштування камери. Спершу `issue` із рядковим `properties`
  * (так вимагає API), потім — звичайні команди v1: на одних камерах працює
  * перше, на інших друге.
@@ -111,16 +162,7 @@ export async function sendCameraProperty(
 ): Promise<void> {
   if (!CONTROLLABLE.has(code)) throw new Error(`Код ${code} не дозволено для камери`);
 
-  try {
-    await tuyaRequest<boolean>({
-      path: `/v2.0/cloud/thing/${deviceId}/shadow/properties/issue`,
-      method: 'POST',
-      body: { properties: JSON.stringify({ [code]: value }) },
-    });
-  } catch (err) {
-    console.warn('[tuya] issue не вдалося, пробуємо команди v1:', err instanceof Error ? err.message : err);
-    await sendCommands(deviceId, [{ code, value }]);
-  }
+  await issueProperty(deviceId, code, value);
   // Тіньова модель Tuya оновлюється із запізненням, і негайне перечитування
   // повернуло б старе значення — тож записане значення кладемо в кеш одразу
   // й перечитуємо з хмари приблизно за хвилину.
