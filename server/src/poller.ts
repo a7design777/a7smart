@@ -21,6 +21,7 @@ import {
 import { normalizeHa } from './ha/normalize.js';
 import { refreshHaExtras } from './ha/extras.js';
 import { syncTuyaHomes } from './tuyaHomes.js';
+import { getCameraProperties, buildCameraControls } from './tuya/cameras.js';
 import { pickPowerDevice } from './presence.js';
 import {
   listEnabledDevices,
@@ -224,6 +225,39 @@ async function refreshCatalog(): Promise<void> {
   }
 }
 
+/** Камера, чий /status недоступний: базовий стан із каталогу. */
+function cameraBase(id: string, name: string, online: boolean): NormalizedDevice {
+  return {
+    id,
+    name,
+    kind: 'camera',
+    online,
+    gangs: [],
+    target: null,
+    metrics: [],
+    states: [],
+    options: [],
+    ptz: true,
+  };
+}
+
+/** Камери вважаємо поворотними й додаємо їхні налаштування (кеш 30 хв). */
+async function attachCameraControls(state: NormalizedDevice, force = false): Promise<void> {
+  const { controls, options } = buildCameraControls(await getCameraProperties(state.id, force));
+  state.ptz = true;
+  state.controls = controls;
+  state.options = options;
+}
+
+/** Перечитати налаштування камери після команди. */
+export async function refreshCamera(deviceId: string): Promise<void> {
+  const cached = stateCache.get(deviceId);
+  if (!cached || cached.kind !== 'camera') return;
+  const next = { ...cached };
+  await attachCameraControls(next, true);
+  stateCache.set(deviceId, next);
+}
+
 async function pollTuya(
   rows: Awaited<ReturnType<typeof listEnabledDevices>>,
 ): Promise<Array<{ deviceId: string; key: string; value: number }>> {
@@ -237,10 +271,15 @@ async function pollTuya(
   for (const row of rows) {
     const device = byId.get(row.external_id);
     const status = statuses.get(row.external_id);
-    if (!device || !status) continue;
+    if (!device) continue;
+    // Камери без датапойнтів у /status (cdsxj) усе одно мають налаштування.
+    if (!status && row.kind !== 'camera') continue;
 
     // Ім'я беремо з нашої БД: користувач міг перейменувати пристрій.
-    const normalized = normalize({ ...device, name: row.name }, status);
+    const normalized = status
+      ? normalize({ ...device, name: row.name }, status)
+      : cameraBase(device.id, row.name, device.online);
+    if (normalized.kind === 'camera') await attachCameraControls(normalized);
     stateCache.set(row.external_id, normalized);
 
     for (const metric of normalized.metrics) {

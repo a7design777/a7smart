@@ -71,6 +71,8 @@ export interface NormalizedDevice {
   options: OptionControl[];
   /** Камера вміє поворот/нахил (датапойнт ptz_control у статусі). */
   ptz: boolean;
+  /** Налаштування-перемикачі камери (рух, сирена, запис…): не «живлення», тому окремо від gangs. */
+  controls?: Gang[];
   /** Тижневий розклад термостата (лише Remihome, лише читання). */
   schedule?: ScheduleSlot[];
 }

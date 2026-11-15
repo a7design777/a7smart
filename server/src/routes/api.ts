@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, verifyPassword, startSession, endSession } from '../auth.js';
 import { config } from '../config.js';
 import { pickPowerDevice } from '../presence.js';
+import { isCameraControl, sendCameraProperty } from '../tuya/cameras.js';
 import {
   sendCommands,
   allocateCameraStream,
@@ -22,6 +23,7 @@ import {
   getProvider,
   refreshDevice,
   tryHaCommand,
+  refreshCamera,
   health,
 } from '../poller.js';
 import {
@@ -210,6 +212,12 @@ api.post('/devices/:id/command', async (c) => {
       await setRemihomeProperty(id, parsed.data.code, String(parsed.data.value));
     } else {
       // За HA_CONTROL=1 пробуємо шлях через HA; не вийшло — напряму в Tuya.
+      if (getCachedState(id)?.kind === 'camera' && isCameraControl(parsed.data.code)) {
+        // Налаштування камер ідуть окремим шляхом (thing model).
+        await sendCameraProperty(id, parsed.data.code, parsed.data.value);
+        await refreshCamera(id);
+        return c.json({ ok: true, state: getCachedState(id) });
+      }
       const viaHa = await tryHaCommand(id, parsed.data.code, parsed.data.value);
       if (!viaHa) await sendCommands(id, [parsed.data]);
     }

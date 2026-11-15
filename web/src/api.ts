@@ -47,6 +47,8 @@ export interface DeviceState {
   states: StateFlag[];
   options: OptionControl[];
   ptz: boolean;
+  /** Налаштування-перемикачі камери (рух, сирена, запис…). */
+  controls?: Gang[];
   /** Тижневий розклад термостата (Remihome), лише для показу. */
   schedule?: ScheduleSlot[];
 }
