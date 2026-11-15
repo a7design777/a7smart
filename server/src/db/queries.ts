@@ -25,6 +25,9 @@ export interface ApartmentRow {
   power_device_id: string | null;
   /** IANA-пояс квартири, напр. Europe/Kyiv. */
   timezone: string;
+  /** Точка квартири на карті; null — погода з HA. */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 /** Рядок, як його реально повертає D1: BOOLEAN зберігається як INTEGER 0/1. */
@@ -53,7 +56,7 @@ function invalidateDevicesCache(): void {
 export async function listApartments(): Promise<ApartmentRow[]> {
   if (apartmentsCache) return apartmentsCache;
   const rows = await sql<RawApartmentRow[]>`
-    SELECT id, slug, name, sort_order, is_main, power_device_id, timezone
+    SELECT id, slug, name, sort_order, is_main, power_device_id, timezone, latitude, longitude
     FROM apartments
     ORDER BY is_main DESC, sort_order, name
   `;
@@ -98,7 +101,7 @@ export async function createApartment(name: string): Promise<ApartmentRow> {
       -- створення однієї дашборд усе одно відкривався б на «Усі».
       (SELECT count(*) = 0 FROM apartments)
     )
-    RETURNING id, slug, name, sort_order, is_main, power_device_id, timezone
+    RETURNING id, slug, name, sort_order, is_main, power_device_id, timezone, latitude, longitude
   `;
   invalidateApartmentsCache();
   const row = rows[0]!;
@@ -112,6 +115,20 @@ export async function setPowerDevice(apartmentId: number, deviceId: string | nul
 
 export async function setApartmentTimezone(apartmentId: number, timezone: string): Promise<void> {
   await sql`UPDATE apartments SET timezone = ${timezone} WHERE id = ${apartmentId}`;
+  invalidateApartmentsCache();
+}
+
+export async function setApartmentLocation(
+  apartmentId: number,
+  loc: { latitude: number | null; longitude: number | null; timezone?: string },
+): Promise<void> {
+  await sql`
+    UPDATE apartments
+    SET latitude = ${loc.latitude},
+        longitude = ${loc.longitude},
+        timezone = coalesce(${loc.timezone ?? null}, timezone)
+    WHERE id = ${apartmentId}
+  `;
   invalidateApartmentsCache();
 }
 

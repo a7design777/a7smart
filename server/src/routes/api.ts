@@ -4,6 +4,7 @@ import { requireAuth, verifyPassword, startSession, endSession } from '../auth.j
 import { config } from '../config.js';
 import { pickPowerDevice } from '../presence.js';
 import { tzOffsetMinutes, isValidTimezone } from '../timezone.js';
+import { getLocationExtras } from '../weather.js';
 import { isCameraControl, sendCameraProperty } from '../tuya/cameras.js';
 import {
   sendCommands,
@@ -31,6 +32,7 @@ import {
   listApartments,
   setPowerDevice,
   setApartmentTimezone,
+  setApartmentLocation,
   listEnabledDevices,
   getHistory,
   getPresenceDaily,
@@ -163,6 +165,25 @@ api.patch('/apartments/:id/power-device', async (c) => {
   return c.json({ ok: true });
 });
 
+const locationSchema = z.object({
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
+  timezone: z.string().min(1).max(64).optional(),
+});
+
+/** Точка квартири на карті й (необов'язково) її часовий пояс. null — прибрати точку. */
+api.patch('/apartments/:id/location', async (c) => {
+  const parsed = locationSchema.safeParse(await c.req.json().catch(() => null));
+  const id = Number(c.req.param('id'));
+  if (!parsed.success || !Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+  const { latitude, longitude, timezone } = parsed.data;
+  // Координати задаються парою: половина точки безглузда.
+  if ((latitude === null) !== (longitude === null)) return c.json({ error: 'bad_request' }, 400);
+  if (timezone !== undefined && !isValidTimezone(timezone)) return c.json({ error: 'bad_request' }, 400);
+  await setApartmentLocation(id, { latitude, longitude, timezone });
+  return c.json({ ok: true });
+});
+
 const timezoneSchema = z.object({ timezone: z.string().min(1).max(64) });
 
 api.patch('/apartments/:id/timezone', async (c) => {
@@ -198,7 +219,21 @@ api.get('/devices', async (c) => {
 });
 
 /** Погода, сонце, медіа з HA — із кешу поллера, у HA запит не йде. */
-api.get('/overview/extras', (c) => c.json(getHaExtras()));
+api.get('/overview/extras', async (c) => {
+  // Квартира з виставленою точкою отримує погоду для неї; решта — з HA.
+  const apartmentId = Number(c.req.query('apartmentId'));
+  const apartment = Number.isInteger(apartmentId)
+    ? (await listApartments()).find((a) => a.id === apartmentId)
+    : undefined;
+  if (apartment && apartment.latitude !== null && apartment.longitude !== null) {
+    try {
+      return c.json(await getLocationExtras(apartment.latitude, apartment.longitude));
+    } catch (err) {
+      console.warn('[weather] не вдалося, беремо погоду HA:', err instanceof Error ? err.message : err);
+    }
+  }
+  return c.json(getHaExtras());
+});
 
 api.get('/devices/:id/state', (c) => {
   const state = getCachedState(c.req.param('id'));
@@ -283,6 +318,7 @@ api.post('/cameras/:id/ptz', async (c) => {
     await ptzMove(c.req.param('id'), parsed.data.direction);
     return c.json({ ok: true });
   } catch (err) {
+    console.warn('[ptz] не вдалося:', c.req.param('id'), parsed.data.direction, err instanceof Error ? err.message : err);
     if (err instanceof TuyaApiError) {
       return c.json({ error: 'tuya_error', code: err.code, message: err.tuyaMessage }, 502);
     }

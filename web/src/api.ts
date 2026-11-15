@@ -90,6 +90,9 @@ export interface Apartment {
   power_device_id: string | null;
   /** IANA-пояс квартири (Europe/Kyiv, Europe/Madrid…). */
   timezone: string;
+  /** Точка квартири на карті; null — погода береться з HA. */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface PresenceResponse {
@@ -167,6 +170,15 @@ export const api = {
 
   presence: (apartmentId: number, days: number) =>
     request<PresenceResponse>(`/presence?apartmentId=${apartmentId}&days=${days}`),
+
+  setApartmentLocation: (
+    apartmentId: number,
+    loc: { latitude: number | null; longitude: number | null; timezone?: string },
+  ) =>
+    request<{ ok: true }>(`/apartments/${apartmentId}/location`, {
+      method: 'PATCH',
+      body: JSON.stringify(loc),
+    }),
 
   setPowerDevice: (apartmentId: number, deviceId: string | null) =>
     request<{ ok: true }>(`/apartments/${apartmentId}/power-device`, {
@@ -313,5 +325,8 @@ export interface HaExtras {
 }
 
 export const overviewApi = {
-  extras: () => request<HaExtras>('/overview/extras'),
+  extras: (apartmentId?: number | null) =>
+    request<HaExtras>(
+      apartmentId != null ? `/overview/extras?apartmentId=${apartmentId}` : '/overview/extras',
+    ),
 };
