@@ -8,7 +8,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { api, type PresenceResponse } from '../api';
+import { api, type Device, type PresenceResponse } from '../api';
+import { useStore } from '../store';
 
 /**
  * Скільки годин на добу у квартирі було світло.
@@ -55,13 +56,28 @@ export function PowerChart({
   apartmentId,
   title,
   days,
+  devices,
 }: {
   apartmentId: number;
   title: string;
   days: number;
+  /** Пристрої цієї квартири — кандидати на роль датчика світла. */
+  devices: Device[];
 }) {
   const [data, setData] = useState<PresenceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const refresh = useStore((s) => s.refresh);
+
+  const chooseSource = (value: string) => {
+    api
+      .setPowerDevice(apartmentId, value === '' ? null : value)
+      .then(() => {
+        setReload((n) => n + 1);
+        void refresh();
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +96,7 @@ export function PowerChart({
     return () => {
       cancelled = true;
     };
-  }, [apartmentId, days]);
+  }, [apartmentId, days, reload]);
 
   const columns = useMemo(() => (data ? toColumns(data, days) : []), [data, days]);
   const totalOn = columns.reduce((s, b) => s + b.on, 0);
@@ -127,6 +143,21 @@ export function PowerChart({
           </span>
         </>
       )}
+      <label className="card__sub" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        Датчик світла:
+        <select
+          value={data?.source && !data.source.auto ? data.source.id : ''}
+          onChange={(e) => chooseSource(e.target.value)}
+          aria-label="Пристрій, за яким визначається світло"
+        >
+          <option value="">Авто{data?.source?.auto ? ` (${data.source.name})` : ''}</option>
+          {devices.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

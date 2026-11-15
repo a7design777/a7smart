@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireAuth, verifyPassword, startSession, endSession } from '../auth.js';
 import { config } from '../config.js';
+import { pickPowerDevice } from '../presence.js';
+import { isCameraControl, sendCameraProperty } from '../tuya/cameras.js';
 import {
   sendCommands,
   allocateCameraStream,
@@ -21,10 +23,12 @@ import {
   getProvider,
   refreshDevice,
   tryHaCommand,
+  refreshCamera,
   health,
 } from '../poller.js';
 import {
   listApartments,
+  setPowerDevice,
   listEnabledDevices,
   getHistory,
   getPresenceDaily,
@@ -139,6 +143,24 @@ api.patch('/apartments/:id/main', async (c) => {
   return c.json({ ok: true });
 });
 
+const powerDeviceSchema = z.object({ deviceId: z.string().min(1).nullable() });
+
+/** Обрати пристрій-датчик світла квартири (null — автовибір). */
+api.patch('/apartments/:id/power-device', async (c) => {
+  const parsed = powerDeviceSchema.safeParse(await c.req.json().catch(() => null));
+  const id = Number(c.req.param('id'));
+  if (!parsed.success || !Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
+
+  const { deviceId } = parsed.data;
+  if (deviceId !== null) {
+    const device = (await listEnabledDevices()).find((d) => d.external_id === deviceId);
+    // Датчиком може бути лише пристрій цієї ж квартири.
+    if (!device || device.apartment_id !== id) return c.json({ error: 'bad_request' }, 400);
+  }
+  await setPowerDevice(id, deviceId);
+  return c.json({ ok: true });
+});
+
 api.delete('/apartments/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isInteger(id)) return c.json({ error: 'bad_request' }, 400);
@@ -190,6 +212,12 @@ api.post('/devices/:id/command', async (c) => {
       await setRemihomeProperty(id, parsed.data.code, String(parsed.data.value));
     } else {
       // За HA_CONTROL=1 пробуємо шлях через HA; не вийшло — напряму в Tuya.
+      if (getCachedState(id)?.kind === 'camera' && isCameraControl(parsed.data.code)) {
+        // Налаштування камер ідуть окремим шляхом (thing model).
+        await sendCameraProperty(id, parsed.data.code, parsed.data.value);
+        await refreshCamera(id);
+        return c.json({ ok: true, state: getCachedState(id) });
+      }
       const viaHa = await tryHaCommand(id, parsed.data.code, parsed.data.value);
       if (!viaHa) await sendCommands(id, [parsed.data]);
     }
@@ -292,8 +320,12 @@ api.get('/presence', async (c) => {
   const intervalHours = config.POLL_INTERVAL_MS / 3_600_000;
 
   const rows = await getPresenceDaily({ apartmentId, from, to, offsetMinutes: tz });
+  const apartment = (await listApartments()).find((a) => a.id === apartmentId);
+  const source = apartment ? pickPowerDevice(apartment, await listEnabledDevices()) : null;
   return c.json({
     apartmentId,
+    // Який пристрій вважається датчиком світла і чи обрано його вручну.
+    source: source ? { id: source.device.external_id, name: source.device.name, auto: source.auto } : null,
     days: rows.map((r) => {
       const on = Math.min(24, r.on_samples * intervalHours);
       const covered = Math.min(24, r.samples * intervalHours);

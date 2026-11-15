@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { api, type Device, type PtzDirection } from '../api';
+import { useStore } from '../store';
 import { Icon } from './Icon';
 
 /** Компактний 4-напрямковий D-pad. Діагоналі API підтримує, але на телефоні
@@ -11,6 +12,64 @@ const PTZ_BUTTONS: Array<{ direction: PtzDirection; rotate: number; style: 'up' 
   { direction: 'RIGHT', rotate: 90, style: 'right' },
   { direction: 'DOWN', rotate: 180, style: 'down' },
 ];
+
+/**
+ * Налаштування камери: сповіщення про рух, нічне бачення, запис, сирена.
+ * Згорнуті за замовчуванням — на ТВ і в сітці з 5 камер вони б заважали.
+ * Кожен дотик — реальна команда камері, тому вмикаємо лише за кліком.
+ */
+function CameraSettings({ device }: { device: Device }) {
+  const sendCommand = useStore((s) => s.sendCommand);
+  const [open, setOpen] = useState(false);
+  const controls = device.state?.controls ?? [];
+  const options = device.state?.options ?? [];
+  if (controls.length === 0 && options.length === 0) return null;
+
+  return (
+    <div>
+      <button type="button" className="ghost-btn" onClick={() => setOpen((v) => !v)}>
+        {open ? 'Сховати налаштування' : 'Налаштування камери'}
+      </button>
+
+      {open && (
+        <div className="camera__settings">
+          {options.map((opt) => (
+            <div key={opt.code}>
+              <span className="card__sub">{opt.label}</span>
+              <div className="segmented" role="group" aria-label={opt.label}>
+                {opt.choices.map((choice) => (
+                  <button
+                    key={choice.value}
+                    type="button"
+                    className="segmented__item"
+                    aria-pressed={opt.value === choice.value}
+                    onClick={() => void sendCommand(device.id, opt.code, choice.value)}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="ov-chips">
+            {controls.map((c) => (
+              <button
+                key={c.code}
+                type="button"
+                className="segmented__item ov-chip"
+                aria-pressed={c.on}
+                onClick={() => void sendCommand(device.id, c.code, !c.on)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Живий перегляд камери.
@@ -145,6 +204,8 @@ export function CameraCard({ device }: { device: Device }) {
 
       {loading && <span className="card__sub">під'єднання…</span>}
       {error && <span className="card__sub">{error}</span>}
+
+      <CameraSettings device={device} />
 
       {active && device.state?.ptz && (
         <div className="camera__ptz" role="group" aria-label="Керування поворотом камери">

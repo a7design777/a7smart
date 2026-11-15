@@ -1657,3 +1657,10 @@ input:focus-visible {
     border: 1px solid var(--border);
   }
 }
+
+.camera__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}

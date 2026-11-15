@@ -47,6 +47,8 @@ export interface DeviceState {
   states: StateFlag[];
   options: OptionControl[];
   ptz: boolean;
+  /** Налаштування-перемикачі камери (рух, сирена, запис…). */
+  controls?: Gang[];
   /** Тижневий розклад термостата (Remihome), лише для показу. */
   schedule?: ScheduleSlot[];
 }
@@ -84,10 +86,14 @@ export interface Apartment {
   sort_order: number;
   /** Головна квартира — відкривається одразу при вході. */
   is_main: boolean;
+  /** Пристрій-датчик світла; null — автовибір. */
+  power_device_id: string | null;
 }
 
 export interface PresenceResponse {
   apartmentId: number;
+  /** Пристрій, за яким судимо про світло, і чи обрано його вручну (auto: false). */
+  source: { id: string; name: string; auto: boolean } | null;
   days: Array<{ day: string; onHours: number; offHours: number }>;
 }
 
@@ -161,6 +167,12 @@ export const api = {
     request<PresenceResponse>(
       `/presence?apartmentId=${apartmentId}&days=${days}&tz=${-new Date().getTimezoneOffset()}`,
     ),
+
+  setPowerDevice: (apartmentId: number, deviceId: string | null) =>
+    request<{ ok: true }>(`/apartments/${apartmentId}/power-device`, {
+      method: 'PATCH',
+      body: JSON.stringify({ deviceId }),
+    }),
 
   sync: () => request<{ count: number }>('/sync', { method: 'POST' }),
 

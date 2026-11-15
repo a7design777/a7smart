@@ -21,6 +21,8 @@ export interface ApartmentRow {
   name: string;
   sort_order: number;
   is_main: boolean;
+  /** Датчик світла квартири (див. presence.ts); null — автовибір. */
+  power_device_id: string | null;
 }
 
 /** Рядок, як його реально повертає D1: BOOLEAN зберігається як INTEGER 0/1. */
@@ -49,7 +51,7 @@ function invalidateDevicesCache(): void {
 export async function listApartments(): Promise<ApartmentRow[]> {
   if (apartmentsCache) return apartmentsCache;
   const rows = await sql<RawApartmentRow[]>`
-    SELECT id, slug, name, sort_order, is_main
+    SELECT id, slug, name, sort_order, is_main, power_device_id
     FROM apartments
     ORDER BY is_main DESC, sort_order, name
   `;
@@ -94,11 +96,16 @@ export async function createApartment(name: string): Promise<ApartmentRow> {
       -- створення однієї дашборд усе одно відкривався б на «Усі».
       (SELECT count(*) = 0 FROM apartments)
     )
-    RETURNING id, slug, name, sort_order, is_main
+    RETURNING id, slug, name, sort_order, is_main, power_device_id
   `;
   invalidateApartmentsCache();
   const row = rows[0]!;
   return { ...row, is_main: Boolean(row.is_main) };
+}
+
+export async function setPowerDevice(apartmentId: number, deviceId: string | null): Promise<void> {
+  await sql`UPDATE apartments SET power_device_id = ${deviceId} WHERE id = ${apartmentId}`;
+  invalidateApartmentsCache();
 }
 
 export async function renameApartment(id: number, name: string): Promise<void> {
