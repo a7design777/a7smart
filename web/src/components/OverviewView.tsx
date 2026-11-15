@@ -41,21 +41,21 @@ const CONDITION_LABEL: Record<string, string> = {
 
 const conditionLabel = (c: string) => CONDITION_LABEL[c] ?? c;
 
-const hhmm = (iso: string | null) =>
+const hhmm = (iso: string | null, timeZone?: string) =>
   iso
-    ? new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+    ? new Date(iso).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', timeZone })
     : '—';
 
 const degrees = (v: number | null) => (v === null ? '—' : `${Math.round(v)}°`);
 
-function useExtras(): HaExtras | null {
+function useExtras(apartmentId: number | null): HaExtras | null {
   const [extras, setExtras] = useState<HaExtras | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
       overviewApi
-        .extras()
+        .extras(apartmentId)
         .then((e) => {
           if (!cancelled) setExtras(e);
         })
@@ -69,7 +69,7 @@ function useExtras(): HaExtras | null {
       cancelled = true;
       clearInterval(t);
     };
-  }, []);
+  }, [apartmentId]);
 
   return extras;
 }
@@ -150,7 +150,7 @@ function Hero({
         <div className="ov-hero__sun">
           <Icon name="sun" size={16} />
           <span>
-            Схід {hhmm(extras.sun.nextRising)} · Захід {hhmm(extras.sun.nextSetting)}
+            Схід {hhmm(extras.sun.nextRising, timeZone)} · Захід {hhmm(extras.sun.nextSetting, timeZone)}
           </span>
         </div>
       )}
@@ -495,7 +495,7 @@ export function OverviewView({
   apartments: Apartment[];
   activeApartmentId: number | null;
 }) {
-  const extras = useExtras();
+  const extras = useExtras(activeApartmentId);
   const [prefs, update] = usePrefs();
   const [editing, setEditing] = useState(false);
   const isTv = Boolean(document.documentElement.dataset.tv);

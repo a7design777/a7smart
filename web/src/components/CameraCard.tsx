@@ -109,13 +109,16 @@ export function CameraCard({ device }: { device: Device }) {
   /** Браузер може відхилити автозапуск — тоді потрібен явний жест. */
   const [needsGesture, setNeedsGesture] = useState(false);
   const [ptzBusy, setPtzBusy] = useState<PtzDirection | null>(null);
+  const [ptzError, setPtzError] = useState<string | null>(null);
 
   async function move(direction: PtzDirection) {
     setPtzBusy(direction);
+    setPtzError(null);
     try {
       await api.cameraPtz(device.id, direction);
-    } catch {
-      // Мовчки: короткий поштовх, не варто піднімати банер через один збій.
+    } catch (err) {
+      // Показуємо причину біля стрілок: тиха відмова виглядала як «кнопка зламана».
+      setPtzError(err instanceof Error ? err.message : 'Поворот не вдався');
     } finally {
       setPtzBusy(null);
     }
@@ -224,6 +227,8 @@ export function CameraCard({ device }: { device: Device }) {
       {error && <span className="card__sub">{error}</span>}
 
       <CameraSettings device={device} />
+
+      {ptzError && <span className="card__sub">Поворот: {ptzError}</span>}
 
       {active && device.state?.ptz && (
         <div className="camera__ptz" role="group" aria-label="Керування поворотом камери">

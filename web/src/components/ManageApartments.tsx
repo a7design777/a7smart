@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useStore } from '../store';
 import { useDragAssign } from '../useDragAssign';
 import { Icon, KIND_ICON } from './Icon';
+import { LocationEditor } from './LocationEditor';
 import type { Device } from '../api';
 
 /** Зона «без квартири» має свій ідентифікатор, бо null у dataset не передаси. */
@@ -75,6 +76,7 @@ export function ManageApartments() {
     zoneId: string,
     title: string,
     actions?: { isMain: boolean; onMain: () => void; onDelete: () => void },
+    extra?: React.ReactNode,
   ) => {
     const list = byApartment.get(zoneId) ?? [];
     return (
@@ -106,6 +108,8 @@ export function ManageApartments() {
             </button>
           </div>
         )}
+
+        {extra}
 
         <div className="chip-list">
           {list.length === 0 ? (
@@ -167,7 +171,8 @@ export function ManageApartments() {
               void removeApartment(a.id);
             }
           },
-        }),
+        },
+        <LocationEditor apartment={a} />),
       )}
 
       {renderZone(UNASSIGNED, 'Без квартири')}

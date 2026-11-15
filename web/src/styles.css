@@ -1680,3 +1680,18 @@ input:focus-visible {
     font-size: 13px;
   }
 }
+
+.location-editor {
+  margin: 8px 0;
+}
+.location-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.location-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
